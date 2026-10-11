@@ -82,6 +82,8 @@ Le panneau admin des niveaux de risque utilise une table Prisma ajoutée après 
 
 ## Documents
 
+Pour s'y retrouver sans chercher : le **[wiki](https://github.com/BienOuBien13/BienDecider/wiki)**, généré depuis ce dépôt à chaque fusion sur `main` (accueil et aide-mémoire dans [wiki/](wiki), état du code calculé par [scripts/build-wiki.cjs](scripts/build-wiki.cjs)). Ne pas le modifier dans GitHub : corriger le fichier source dans une PR.
+
 - **[docs/architecture.md](docs/architecture.md) — logique inter-agents et stack technique à jour (diagrammes)**
 - [docs/spec-contextualisation.md](docs/spec-contextualisation.md) — parcours d'onboarding / contextualisation de l'entreprise
 - [docs/agents-roster.md](docs/agents-roster.md) — rôles, responsabilités et garde-fous des agents produit

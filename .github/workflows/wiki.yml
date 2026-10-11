@@ -1,0 +1,48 @@
+name: Wiki
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish wiki from the repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Build pages
+        run: node scripts/build-wiki.cjs "$RUNNER_TEMP/wiki-pages" --strict
+      - name: Mirror pages to the wiki repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The wiki repository only exists once a first page was created in the GitHub interface.
+          if ! git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" "$RUNNER_TEMP/wiki-repo"; then
+            echo "::error::Wiki not initialized: create a first page at ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/wiki, then re-run this workflow."
+            exit 1
+          fi
+          cd "$RUNNER_TEMP/wiki-repo"
+          git rm -q -r --ignore-unmatch . > /dev/null
+          cp "$RUNNER_TEMP/wiki-pages"/*.md .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Sync wiki from ${GITHUB_SHA::7}"
+          git push

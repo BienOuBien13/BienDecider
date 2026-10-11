@@ -24,6 +24,7 @@ Les branches de travail ne sont pas déployées par Vercel : `vercel.json` désa
 | Fusion ou push sur `main` | GitHub Actions | Les mêmes contrôles, pour détecter une régression sur la branche partagée |
 | Fusion ou push sur `main` | Intégration GitHub de Vercel | Installation, migrations si activées, build et publication sur le domaine du prototype |
 | Déploiement Production réussi | GitHub Actions, workflow `Smoke test` | `/api/health` sert le commit déployé et la base répond, puis `test:brand` en lecture seule sur le domaine ; une Issue est ouverte en cas d'échec |
+| Fusion ou push sur `main` | GitHub Actions, workflow `Wiki` | Régénère le [wiki](https://github.com/BienOuBien13/BienDecider/wiki) depuis `wiki/`, `docs/` et le code ; `Checks` vérifie avant fusion que les pages se construisent et que les liens relatifs des guides pointent vers des fichiers existants |
 | Chaque lundi | Dependabot | Une PR groupée de mises à jour npm mineures et correctives, une pour les actions GitHub |
 | Relance manuelle | GitHub > Actions > CI ou Smoke test > Run workflow | Contrôles seulement, aucun déploiement ni changement de base |
 
