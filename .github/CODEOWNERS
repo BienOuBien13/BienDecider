@@ -23,6 +23,8 @@
 
 # Actions externes reelles et garde-fous de delegation
 /src/lib/delegation-risk.ts       @RemiJolivalt @samirt-hue
+/src/lib/delegation-policy.ts     @RemiJolivalt @samirt-hue
+/src/app/api/admin/               @RemiJolivalt @samirt-hue
 /src/lib/outreach.ts              @RemiJolivalt @samirt-hue
 /src/lib/site/publish.ts          @RemiJolivalt @samirt-hue
 /src/app/api/gmail/               @RemiJolivalt @samirt-hue

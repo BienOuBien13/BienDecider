@@ -21,11 +21,11 @@ Le backlog est réparti en douze domaines fonctionnels. Chaque US porte un label
 | Expérience utilisateur | `domaine:ux` | Clarté du parcours, attente, mobile, accessibilité, cohérence visuelle | 18 | 0 | 6 | 11 | 1 |
 | Entreprise | `domaine:entreprise` | Démarches des pères fondateurs : société BienOuBien, banque, contrats, assurances | 15 | 5 | 3 | 6 | 1 |
 
-Vue par domaine : `https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Amoteur` (remplacer `moteur` par le domaine voulu).
+Vue par domaine : `https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Amoteur` (remplacer `moteur` par le domaine voulu).
 
 ## Focus actuel : délégation P1
 
-État vérifié dans les Issues ouvertes le **2026-10-10** : [7 US `domaine:delegation` en P1](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Adelegation%20label%3Apriority%3Ap1), 3 US en P2. Les priorités sont déjà correctement étiquetées ; ne pas promouvoir automatiquement les P2.
+État vérifié dans les Issues ouvertes le **2026-10-10** : [7 US `domaine:delegation` en P1](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Adelegation%20label%3Apriority%3Ap1), 3 US en P2. Les priorités sont déjà correctement étiquetées ; ne pas promouvoir automatiquement les P2.
 
 **Attention au vocabulaire :** ce domaine concerne l'autonomie de BienDecider dans les actions des entreprises. Ce n'est pas la délégation de revue des PR aux développeurs après 4 secondes, documentée dans [ci-cd.md](ci-cd.md).
 
@@ -33,11 +33,11 @@ Ordre fondé sur les dépendances des US :
 
 | Étape | Issue | Travail | État à suivre |
 |---|---:|---|---|
-| Décision des fondateurs | [#35](https://github.com/RemiJolivalt/pepito/issues/35) `del-1` | Définir par type d'action ce qui peut partir sans validation, puis faire valider la politique par les deux fondateurs. | À prendre en premier (`status:ready`) ; bloque le code du domaine. |
-| Garde-fous parallélisables après la décision | [#36](https://github.com/RemiJolivalt/pepito/issues/36) `del-2`, [#38](https://github.com/RemiJolivalt/pepito/issues/38) `del-4`, [#39](https://github.com/RemiJolivalt/pepito/issues/39) `del-5` | Niveau par action, limites/budget, évaluation du risque fondée sur des règles. | Débloquer après #35 (`status:ready`). |
-| Contrôle opérateur | [#41](https://github.com/RemiJolivalt/pepito/issues/41) `del-7`, [#42](https://github.com/RemiJolivalt/pepito/issues/42) `del-8` | Journal complet et pause immédiate avant toute action autonome. | Débloquer après #35 (`status:ready`), en priorité avant la première exécution autonome. |
-| Agir dans le cadre | [#40](https://github.com/RemiJolivalt/pepito/issues/40) `del-6` | Exécuter seulement si niveau, risque, autorisation et budget le permettent ; sinon demander validation. | Après #35, #36, #38 et #39 ; `status:blocked` jusque-là. |
-| P2, volontairement hors focus immédiat | [#37](https://github.com/RemiJolivalt/pepito/issues/37) `del-3`, [#43](https://github.com/RemiJolivalt/pepito/issues/43) `del-9`, [#44](https://github.com/RemiJolivalt/pepito/issues/44) `del-10` | Mode Conseiller, annulation/réversibilité, fusion du réglage de prospection. | Garder en P2 jusqu'à replanification. |
+| Décision des fondateurs | [#35](https://github.com/BienOuBien13/BienDecider/issues/35) `del-1` | Définir par type d'action ce qui peut partir sans validation, puis faire valider la politique par les deux fondateurs. | À prendre en premier (`status:ready`) ; bloque le code du domaine. |
+| Garde-fous parallélisables après la décision | [#36](https://github.com/BienOuBien13/BienDecider/issues/36) `del-2`, [#38](https://github.com/BienOuBien13/BienDecider/issues/38) `del-4`, [#39](https://github.com/BienOuBien13/BienDecider/issues/39) `del-5` | Niveau par action, limites/budget, évaluation du risque fondée sur des règles. | Débloquer après #35 (`status:ready`). |
+| Contrôle opérateur | [#41](https://github.com/BienOuBien13/BienDecider/issues/41) `del-7`, [#42](https://github.com/BienOuBien13/BienDecider/issues/42) `del-8` | Journal complet et pause immédiate avant toute action autonome. | Débloquer après #35 (`status:ready`), en priorité avant la première exécution autonome. |
+| Agir dans le cadre | [#40](https://github.com/BienOuBien13/BienDecider/issues/40) `del-6` | Exécuter seulement si niveau, risque, autorisation et budget le permettent ; sinon demander validation. | Après #35, #36, #38 et #39 ; `status:blocked` jusque-là. |
+| P2, volontairement hors focus immédiat | [#37](https://github.com/BienOuBien13/BienDecider/issues/37) `del-3`, [#43](https://github.com/BienOuBien13/BienDecider/issues/43) `del-9`, [#44](https://github.com/BienOuBien13/BienDecider/issues/44) `del-10` | Mode Conseiller, annulation/réversibilité, fusion du réglage de prospection. | Garder en P2 jusqu'à replanification. |
 
 La validation humaine demeure le défaut tant que #35 n'est pas approuvée par les deux fondateurs et que les garde-fous P1 ne sont pas livrés et testés. La demande d'autonomie ne vaut pas autorisation de publier ou d'envoyer pendant cette phase.
 

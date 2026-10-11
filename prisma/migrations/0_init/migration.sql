@@ -152,6 +152,18 @@ CREATE TABLE "ExecutionLog" (
     CONSTRAINT "ExecutionLog_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "DelegationRiskSetting" (
+    "id" TEXT NOT NULL,
+    "actionKind" TEXT NOT NULL,
+    "riskLevel" TEXT NOT NULL,
+    "updatedBy" TEXT NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "DelegationRiskSetting_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Company_ownerEmail_key" ON "Company"("ownerEmail");
 
@@ -166,6 +178,9 @@ CREATE UNIQUE INDEX "ChannelConnection_companyId_channel_key" ON "ChannelConnect
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ExecutionLog_proposalId_key" ON "ExecutionLog"("proposalId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DelegationRiskSetting_actionKind_key" ON "DelegationRiskSetting"("actionKind");
 
 -- AddForeignKey
 ALTER TABLE "Lead" ADD CONSTRAINT "Lead_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
