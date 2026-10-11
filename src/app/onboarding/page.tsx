@@ -80,7 +80,6 @@ export default function OnboardingPage() {
         }),
       });
       if (!res.ok) throw new Error();
-      const company = await res.json();
 
       if (isNew) {
         // Premier passage de Martine (audit) lancé automatiquement à la fin

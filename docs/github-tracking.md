@@ -2,20 +2,20 @@
 
 ## Une source de verite
 
-Le suivi courant est dans [les Issues BienDecider](https://github.com/RemiJolivalt/pepito/issues), pas dans deux listes de cases a maintenir en parallele. [backlog.md](backlog.md) conserve le contexte, les decisions et l'historique des livraisons. Les anciens elements livres ne sont pas recrees comme des US ouvertes.
+Le suivi courant est dans [les Issues BienDecider](https://github.com/BienOuBien13/BienDecider/issues), pas dans deux listes de cases a maintenir en parallele. [backlog.md](backlog.md) conserve le contexte, les decisions et l'historique des livraisons. Les anciens elements livres ne sont pas recrees comme des US ouvertes.
 
 Chaque US contient le besoin utilisateur, des criteres d'acceptation, les dependances, la verification et le perimetre. Une US = un resultat livrable ; si elle est trop grosse, la decouper avant de la prendre.
 
 ## Vues utiles sans outil supplementaire
 
-- [US ouvertes](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus).
-- [Pretes a prendre](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Aready).
-- [Mon travail](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20assignee%3A%40me).
-- [A relire](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Areview).
-- [Bloquees](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Ablocked).
-- [P0](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Apriority%3Ap0).
-- [Délégation P1](https://github.com/RemiJolivalt/pepito/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Adelegation%20label%3Apriority%3Ap1).
-- [Relectures differees, PR ouvertes ou fermees](https://github.com/RemiJolivalt/pepito/pulls?q=is%3Apr%20label%3Areview-deferred).
+- [US ouvertes](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus).
+- [Pretes a prendre](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Aready).
+- [Mon travail](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20assignee%3A%40me).
+- [A relire](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Areview).
+- [Bloquees](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Ablocked).
+- [P0](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Apriority%3Ap0).
+- [Délégation P1](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Adelegation%20label%3Apriority%3Ap1).
+- [Relectures differees, PR ouvertes ou fermees](https://github.com/BienOuBien13/BienDecider/pulls?q=is%3Apr%20label%3Areview-deferred).
 
 Pas de GitHub Project obligatoire : les Issues et les filtres suffisent a deux. Un tableau Project pourra etre ajoute plus tard sans dupliquer les US.
 
@@ -49,7 +49,7 @@ Réglages admin dynamiques (P1) : procédure de rôle explicite, table et déplo
 1. Choisir ensemble les deux prochaines US, selon priorite et dependances. Mettre a jour les criteres si necessaire. Chacun commence par une seule US active.
 2. Dans **Assignees**, assigner une personne responsable. Ne pas affecter silencieusement une US a l'autre ; confirmer qu'elle est disponible. Un second participant peut etre mentionne dans le corps.
 3. Avant de coder, passer a `status:in-progress` et nommer la branche `feat/<numero>-description` ou `fix/<numero>-description`. Pour une demarche externe, le responsable suit la console et note la decision dans l'Issue.
-4. Ouvrir la PR vers `main`, ajouter `Closes #numero` si elle livre tous les criteres, sinon `Refs #numero`. Passer l'US a `status:review` et demander la relecture. Appliquer la delegation de [ci-cd.md](ci-cd.md) apres 4 secondes sans reponse ou indisponibilite annoncee, pour tous les niveaux de risque ; l'Issue ne vaut pas autorisation d'ignorer la CI. Documenter impacts, tests et retour arriere, puis demander une relecture differee.
+4. Ouvrir la PR vers `main`, ajouter `Closes #numero` si elle livre tous les criteres, sinon `Refs #numero`. Passer l'US a `status:review` et demander la relecture. Appliquer la delegation de [ci-cd.md](ci-cd.md) apres 4 secondes sans reponse ou indisponibilite annoncee, hors zones sensibles de CODEOWNERS ou l'approbation de l'autre developpeur est obligatoire ; l'Issue ne vaut pas autorisation d'ignorer la CI. Documenter impacts, tests et retour arriere, puis demander une relecture differee.
 5. Apres Checks vert et validation/delegation, fusionner. GitHub ferme automatiquement l'US liee par `Closes` lorsque la PR arrive sur `main`. L'auteur confirme Vercel et la recette dans l'Issue ; retirer le label de statut devenu inutile. Si le deploiement ou les criteres echouent, rouvrir et noter le probleme.
 6. Si bloque, mettre `status:blocked`, expliquer le blocage, qui peut agir et la prochaine verification. Repasser a ready quand les dependances sont levees ; ce changement n'est pas automatise sur une simple fermeture d'Issue dependante.
 
