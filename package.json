@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "node scripts/migrate-on-deploy.cjs && next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 0",
     "test:ux": "playwright test tests/user-journey.spec.ts --workers=1",
     "test:brand": "playwright test tests/brand.spec.ts --workers=1",
     "test:gmail": "playwright test tests/gmail.spec.ts --workers=1",

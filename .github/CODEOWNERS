@@ -1,0 +1,32 @@
+# Zones sensibles : une approbation de l'autre developpeur est obligatoire
+# (regle « Require review from Code Owners » du ruleset main). L'auteur d'une
+# PR ne peut pas approuver sa propre PR. Hors de ces chemins, la delegation
+# de docs/ci-cd.md reste possible.
+
+# Base de donnees
+/prisma/                          @RemiJolivalt @samirt-hue
+/prisma.config.ts                 @RemiJolivalt @samirt-hue
+/scripts/migrate-on-deploy.cjs    @RemiJolivalt @samirt-hue
+/src/lib/prisma.ts                @RemiJolivalt @samirt-hue
+
+# CI, protections et deploiement
+/.github/                         @RemiJolivalt @samirt-hue
+/vercel.json                      @RemiJolivalt @samirt-hue
+
+# Authentification, sessions, OAuth et jetons
+/src/lib/session.ts               @RemiJolivalt @samirt-hue
+/src/lib/password.ts              @RemiJolivalt @samirt-hue
+/src/lib/admin.ts                 @RemiJolivalt @samirt-hue
+/src/lib/oauth/                   @RemiJolivalt @samirt-hue
+/src/app/api/auth/                @RemiJolivalt @samirt-hue
+/src/app/api/oauth/               @RemiJolivalt @samirt-hue
+
+# Actions externes reelles et garde-fous de delegation
+/src/lib/delegation-risk.ts       @RemiJolivalt @samirt-hue
+/src/lib/delegation-policy.ts     @RemiJolivalt @samirt-hue
+/src/app/api/admin/               @RemiJolivalt @samirt-hue
+/src/lib/outreach.ts              @RemiJolivalt @samirt-hue
+/src/lib/site/publish.ts          @RemiJolivalt @samirt-hue
+/src/app/api/gmail/               @RemiJolivalt @samirt-hue
+/src/app/api/proposals/           @RemiJolivalt @samirt-hue
+/src/app/api/cron/                @RemiJolivalt @samirt-hue

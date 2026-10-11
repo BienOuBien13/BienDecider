@@ -19,9 +19,27 @@ jobs:
     name: Checks
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      # Throwaway database, recreated on every run: never the prototype database.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       NEXT_TELEMETRY_DISABLED: "1"
       DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      # Dummy value, only meaningful for the throwaway database above.
+      SESSION_SECRET: ci-only-session-secret-not-used-anywhere-else
+      UX_TEST_BASE_URL: http://localhost:3000
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,7 +50,7 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
-      - name: Lint
+      - name: Lint (warnings block)
         run: npm run lint
       - name: Gmail tests (no network)
         run: npm run test:gmail
@@ -40,5 +58,33 @@ jobs:
         run: node --test scripts/sync-backlog.test.cjs
       - name: Delegation risk tests (no network)
         run: npm run test:delegation
+      - name: Apply versioned migrations to the throwaway database
+        run: npx prisma migrate deploy
+      - name: Schema has no change missing from migrations
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
       - name: Production build and TypeScript
         run: npm run build
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start the built app
+        run: |
+          npm run start > "$RUNNER_TEMP/app.log" 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/api/health; then exit 0; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/app.log"
+          exit 1
+      - name: Brand tests (browser, no data)
+        run: npm run test:brand
+      - name: User journey tests (browser, throwaway database)
+        run: npm run test:ux
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-results/
+            ${{ runner.temp }}/app.log
+          retention-days: 7

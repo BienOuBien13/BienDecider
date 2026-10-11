@@ -12,6 +12,11 @@ const adminFixture = process.env.ADMIN_UI_TEST === "1";
 const test = base.extend<{ company: Company }>({
   company: async ({ page }, runFixture) => {
     if (!process.env.DATABASE_URL || !process.env.SESSION_SECRET) throw new Error("DATABASE_URL and SESSION_SECRET are required for UX tests.");
+    // Ces tests écrivent en base : refus par défaut de toute base non locale, pour ne jamais viser celle du prototype par erreur.
+    const databaseHost = new URL(process.env.DATABASE_URL).hostname;
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(databaseHost) && process.env.UX_TEST_ALLOW_REMOTE_DB !== "1") {
+      throw new Error("UX tests refuse a non-local DATABASE_URL. Set UX_TEST_ALLOW_REMOTE_DB=1 only for a dedicated development database, never the prototype one.");
+    }
     const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
     const ownerEmail = adminFixture
       ? "ux-admin-settings-test@example.invalid"

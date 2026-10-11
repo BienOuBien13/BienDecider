@@ -12,6 +12,7 @@ export type SafeCompany = Omit<Company, "passwordHash">;
 export function omitPasswordHash<T extends { passwordHash?: string | null }>(
   company: T,
 ): Omit<T, "passwordHash"> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { passwordHash: _passwordHash, ...rest } = company;
   return rest;
 }

@@ -1,0 +1,73 @@
+name: Smoke test
+
+on:
+  deployment_status:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-test
+  cancel-in-progress: true
+
+env:
+  SITE_URL: https://www.biendecider.com
+
+jobs:
+  production:
+    name: Production smoke test
+    # Vercel publishes a deployment status; only successful Production ones are checked.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       startsWith(github.event.deployment.environment, 'Production'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install
+        run: npm ci
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      - name: Health endpoint serves the deployed commit
+        env:
+          EXPECTED_SHA: ${{ github.event.deployment.sha }}
+        run: |
+          for i in $(seq 1 20); do
+            body=$(curl -fsS "$SITE_URL/api/health" || true)
+            echo "$body"
+            if echo "$body" | grep -q '"status":"ok"'; then
+              if [ -z "$EXPECTED_SHA" ] || echo "$body" | grep -q "$EXPECTED_SHA"; then exit 0; fi
+            fi
+            sleep 6
+          done
+          echo "Health check failed or the domain does not serve $EXPECTED_SHA."
+          exit 1
+      - name: Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Public pages (read-only, no data created)
+        run: npm run test:brand
+        env:
+          UX_TEST_BASE_URL: ${{ env.SITE_URL }}
+      - name: Open an Issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Test de fumee en echec sur la production';
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `Le test de fumee post-deploiement a echoue pour le commit \`${context.payload.deployment?.sha ?? context.sha}\`.\n\nExecution : ${run}\n\nVerifier le domaine, puis utiliser le rollback Vercel vers la derniere version saine si necessaire (procedure : docs/ci-cd.md).`;
+            const open = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'open', per_page: 100 });
+            const existing = open.find(item => !item.pull_request && item.title === title);
+            if (existing) await github.rest.issues.createComment({ ...context.repo, issue_number: existing.number, body });
+            else await github.rest.issues.create({ ...context.repo, title, body });

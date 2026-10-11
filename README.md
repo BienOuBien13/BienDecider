@@ -2,13 +2,13 @@
 
 Nom public : **BienDecider**. Domaine cible : **https://www.biendecider.com**. Contact public : **contact@biendecider.com** (redirection OVH vers le Gmail du propriétaire à activer et tester).
 
-Le dépôt GitHub `RemiJolivalt/pepito`, le projet Vercel `pepito`, le nom du package et les cookies techniques restent inchangés. Pas de migration de données ; les anciens contenus et conversations ne sont pas réécrits. Le changement de domaine nécessite une nouvelle connexion (cookies limités à leur hôte).
+Le dépôt GitHub est `BienOuBien13/BienDecider` (transféré depuis `RemiJolivalt/pepito` le 2026-10-11 ; les anciens liens redirigent). Le projet Vercel `pepito`, le nom du package et les cookies techniques restent inchangés. Pas de migration de données ; les anciens contenus et conversations ne sont pas réécrits. Le changement de domaine nécessite une nouvelle connexion (cookies limités à leur hôte).
 
 Configuration du domaine, de la messagerie et recette : [docs/domain-email-setup.md](docs/domain-email-setup.md).
 
 Développement à deux, CI et déploiement du prototype : **[docs/ci-cd.md](docs/ci-cd.md)**. PR courte vers `main`, contrôles GitHub obligatoires après configuration des protections, puis déploiement Vercel automatique. Un seul environnement partagé ; pas de previews de branches.
 
-Répartition du travail et statuts des US : **[docs/github-tracking.md](docs/github-tracking.md)** et [GitHub Issues](https://github.com/RemiJolivalt/pepito/issues). Délégation documentée après 4 secondes sans réponse ou indisponibilité annoncée, pour tous les niveaux de risque, sans contourner la PR ni la CI.
+Répartition du travail et statuts des US : **[docs/github-tracking.md](docs/github-tracking.md)** et [GitHub Issues](https://github.com/BienOuBien13/BienDecider/issues). Délégation documentée après 4 secondes sans réponse ou indisponibilité annoncée, hors zones sensibles de `.github/CODEOWNERS` où l'approbation de l'autre développeur est obligatoire, sans contourner la PR ni la CI.
 
 Réglages admin du risque et migration de base requise : **[docs/delegation-risk-admin.md](docs/delegation-risk-admin.md)**. Page `/admin/risques`, accessible aux seuls emails explicitement listés dans `ADMIN_EMAILS`.
 
@@ -48,7 +48,7 @@ Prérequis : Node.js, une clé API Anthropic (https://console.anthropic.com/), u
    # ADMIN_EMAILS="vous@exemple.com"
    ```
 2. Installer les dépendances : `npm install` (génère aussi le client Prisma via `postinstall`)
-3. Créer les tables dans la base : `npx prisma db push`
+3. Créer les tables dans la base de développement : `npx prisma migrate deploy` (changement de schéma : `npx prisma migrate dev`, voir [docs/ci-cd.md](docs/ci-cd.md))
 4. Lancer le serveur de dev : `npm run dev`
 5. Ouvrir `http://localhost:3000` : se connecter (email + mot de passe — le compte est créé à la première connexion), remplir l'onboarding, puis sur `/dashboard` générer le plan de Paul, lancer les agents et valider leurs propositions.
 
@@ -59,15 +59,15 @@ Gmail manuel : voir [docs/oauth-setup.md](docs/oauth-setup.md) pour `GMAIL_OAUTH
 Test public de marque (aucune donnée créée ni appel agent) : `npm run test:brand`, avec un serveur local actif et Chromium installé. Vérifie les métadonnées, la langue, les liens de contact et les pages publiques de 320 à 1440 px.
 
 Avec le serveur local actif : `npx playwright install chromium`, puis `npm run test:ux`.
-Les tests utilisent `DATABASE_URL` et `SESSION_SECRET` du fichier `.env`. Ils créent uniquement des entreprises fictives `ux-test-…@example.invalid`, supprimées en fin de test. Utiliser de préférence une base de développement. Les appels aux agents et la publication sont simulés ; les décisions et l'ajout au plan utilisent les vraies API. `UX_TEST_BASE_URL` permet de changer le port (défaut : `http://localhost:3000`). Captures desktop/mobile dans `test-results/` (ignoré par Git).
+Les tests utilisent `DATABASE_URL` et `SESSION_SECRET` du fichier `.env`. Ils créent uniquement des entreprises fictives `ux-test-…@example.invalid`, supprimées en fin de test. Par sécurité, ils refusent toute base non locale ; `UX_TEST_ALLOW_REMOTE_DB=1` les autorise sur une base de développement distante dédiée, jamais sur celle du prototype. Les appels aux agents et la publication sont simulés ; les décisions et l'ajout au plan utilisent les vraies API. `UX_TEST_BASE_URL` permet de changer le port (défaut : `http://localhost:3000`). Captures desktop/mobile dans `test-results/` (ignoré par Git).
 
 ## Déploiement (Vercel)
 
-1. Sur [vercel.com](https://vercel.com), importer le repo GitHub `RemiJolivalt/pepito` — aucune clé API Vercel n'est nécessaire, la connexion se fait directement via l'intégration GitHub native (sécurisé, zéro secret à partager).
+1. Sur [vercel.com](https://vercel.com), importer le repo GitHub `BienOuBien13/BienDecider` — aucune clé API Vercel n'est nécessaire, la connexion se fait directement via l'intégration GitHub native (sécurisé, zéro secret à partager).
 2. Onglet **Storage** du projet Vercel → créer une base **Postgres** → Vercel injecte automatiquement `DATABASE_URL` dans les variables d'environnement du projet.
 3. Onglet **Settings → Environment Variables** → ajouter `ANTHROPIC_API_KEY` et `SESSION_SECRET` (même valeur qu'en local, sinon les sessions existantes deviennent invalides). Clés OAuth si prêtes. Laisser `ADMIN_EMAILS` non défini tant que l'admin doit rester ouvert à tous.
 4. Premier déploiement : Vercel lance `npm install` (génère le client Prisma) puis `next build` automatiquement.
-5. Créer les tables en prod : exécuter une fois `npx prisma db push` avec la `DATABASE_URL` de production dans l'environnement (copiée depuis l'onglet Storage de Vercel vers votre terminal local — jamais partagée ailleurs).
+5. Schéma en prod : il évolue par les migrations versionnées de `prisma/migrations`, appliquées au déploiement une fois `MIGRATE_ON_DEPLOY=1` défini dans Vercel. L'activation initiale sur la base existante est décrite dans [docs/ci-cd.md](docs/ci-cd.md) ; ne plus utiliser `prisma db push` sur cette base.
 6. Chaque fusion sur `main` redéploie automatiquement. Les autres branches ne sont pas déployées. Ne pas pousser directement sur `main` dans le processus d'équipe ; voir [docs/ci-cd.md](docs/ci-cd.md) pour les protections à activer.
 
 Le panneau admin des niveaux de risque utilise une table Prisma ajoutée après la mise en place initiale. Avant de l'utiliser, appliquer la mise à jour additive de schéma à la base prototype selon [docs/delegation-risk-admin.md](docs/delegation-risk-admin.md). La CI et le déploiement ne font jamais de `db push` automatiquement.
