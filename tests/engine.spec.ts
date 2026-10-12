@@ -185,3 +185,33 @@ test("a proposal the owner rejected is not recorded again as is", async ({ compa
   // Les raisons de refus sont bien dans le contexte transmis aux agents et au plan.
   expect(await getRejectionContext(company.id)).toContain("Pas de photos de chantier");
 });
+
+test("a request made in the chat becomes a plan action that can only be launched by its owner", async ({ company }) => {
+  const { prisma } = await import("../src/lib/prisma");
+  const { createChatPlanItem, findLaunchablePlanItem, isPlanAgent, statusAfterRun, CHAT_REQUEST_TIMING } = await import("../src/lib/agents/plan-items");
+  expect(isPlanAgent("contenu")).toBe(true);
+  expect(isPlanAgent("co_ceo")).toBe(false);
+  expect(statusAfterRun(2)).toBe("lance");
+  expect(statusAfterRun(0)).toBe("termine");
+
+  const item = await createChatPlanItem(company.id, "contenu", "  Trois posts sur les chantiers  ", " Demande du dirigeant : montrer les réalisations récentes. ");
+  expect(item).toMatchObject({
+    companyId: company.id, agent: "contenu", status: "propose", timing: CHAT_REQUEST_TIMING,
+    title: "Trois posts sur les chantiers", rationale: "Demande du dirigeant : montrer les réalisations récentes.",
+  });
+  // Les productions de l'agent sont rattachées à l'action par planItemId, comme pour une action du plan de Paul.
+  const proposal = await prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post 1", content: "Texte", planItemId: item.id } });
+  const withProposals = await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id }, include: { proposals: true } });
+  expect(withProposals.proposals.map((entry) => entry.id)).toEqual([proposal.id]);
+
+  expect((await findLaunchablePlanItem(company.id, "contenu", item.id))?.id).toBe(item.id);
+  expect(await findLaunchablePlanItem(company.id, "demarchage", item.id)).toBeNull();
+  const other = await prisma.company.create({ data: { ownerEmail: `engine-other-${randomUUID()}@example.invalid`, name: "Autre", trade: "Artisan", servingArea: "Lyon" } });
+  try {
+    expect(await findLaunchablePlanItem(other.id, "contenu", item.id)).toBeNull();
+  } finally {
+    await prisma.company.delete({ where: { id: other.id } });
+  }
+  await prisma.actionPlanItem.update({ where: { id: item.id }, data: { status: "lance" } });
+  expect(await findLaunchablePlanItem(company.id, "contenu", item.id)).toBeNull();
+});

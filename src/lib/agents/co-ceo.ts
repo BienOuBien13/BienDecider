@@ -6,9 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
 import { agentFailureMessage } from "@/lib/agents/agent-errors";
 import { PERSONAS, objectiveLine, directionLine, companyProfileLines } from "@/lib/agents/personas";
-import { runMarketingAgent } from "@/lib/agents/marketing";
-import { runContenuAgent } from "@/lib/agents/contenu";
-import { runDemarchageAgent } from "@/lib/agents/demarchage";
+import { runPlanItem } from "@/lib/agents/plan-runner";
+import { createChatPlanItem, findLaunchablePlanItem, type PlanAgent } from "@/lib/agents/plan-items";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import { getFunnelStats, funnelLines } from "@/lib/funnel";
 import { getChatInstructionsForPlan, getPlanAndFunnelStatus, loadRecentChatHistory } from "@/lib/agents/chat-context";
@@ -84,62 +83,73 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
     },
   });
 
+  // Toute délégation depuis le chat passe par une action du plan : créée
+  // avec son brief (ou reprise si elle y figure déjà), puis lancée par le
+  // même chemin que le bouton "Lancer". Les propositions y sont rattachées.
+  const planActionFields = {
+    actionTitle: z.string().describe("Titre court et concret de l'action demandée, tel qu'il apparaîtra dans le plan, ex: 'Trois posts sur les chantiers terminés'"),
+    brief: z.string().describe("Ce que le dirigeant a demandé et pourquoi, en une ou deux phrases : c'est la consigne que l'agent devra réaliser"),
+    planItemId: z
+      .string()
+      .optional()
+      .describe("Identifiant d'une action déjà au plan avec le statut 'propose' (lu via get_current_status) si la demande y correspond — elle est alors lancée au lieu d'être créée en double"),
+  };
+
+  async function delegateThroughPlan(
+    agent: PlanAgent,
+    input: { actionTitle: string; brief: string; planItemId?: string },
+    extras: { newsContext?: string; prospectDescription?: string } = {},
+  ) {
+    const agentName = PERSONAS[agent].name;
+    const item = input.planItemId
+      ? await findLaunchablePlanItem(companyId, agent, input.planItemId)
+      : await createChatPlanItem(companyId, agent, input.actionTitle, input.brief);
+    if (!item) {
+      return `ÉCHEC, rien n'a été lancé : aucune action à lancer avec cet identifiant pour ${agentName}. Relis le plan avec get_current_status.`;
+    }
+    try {
+      const { producedCount, pendingValidation } = await runPlanItem({ ...item, agent }, extras);
+      return `Action « ${item.title} » ${input.planItemId ? "du plan lancée" : "ajoutée au plan et lancée"} : ${producedCount} production(s) de ${agentName} rattachée(s) à cette action, dont ${pendingValidation} en attente de validation dans le dashboard.`;
+    } catch (error) {
+      console.error(`Erreur délégation ${agent}:`, error);
+      return `ÉCHEC, rien n'a été produit : ${agentFailureMessage(error, agentName)} L'action « ${item.title} » est au plan, à lancer : le dirigeant peut la relancer depuis le plan.`;
+    }
+  }
+
   const delegateMarketing = betaZodTool({
     name: "delegate_marketing",
     description:
-      "Lance Martine (Marketing Officer) : audit de présence en ligne, positionnement concurrentiel, et pilotage de la fiche Google (infos, avis). Ne produit pas de contenu créatif.",
-    inputSchema: z.object({}),
-    run: async () => {
-      try {
-        const { findings, proposals } = await runMarketingAgent(companyId);
-        return `${findings.length} constat(s) et ${proposals.length} proposition(s) créé(s) par ${PERSONAS.marketing.name}, en attente de validation dans le dashboard.`;
-      } catch (error) {
-        console.error("Erreur délégation marketing:", error);
-        return `ÉCHEC, rien n'a été créé : ${agentFailureMessage(error, PERSONAS.marketing.name)}`;
-      }
-    },
+      "Lance Martine (Marketing Officer) : audit de présence en ligne, positionnement concurrentiel, et pilotage de la fiche Google (infos, avis). Ne produit pas de contenu créatif. Crée l'action correspondante dans le plan.",
+    inputSchema: z.object(planActionFields),
+    run: (input) => delegateThroughPlan("marketing", input),
   });
 
   const delegateContenu = betaZodTool({
     name: "delegate_contenu",
     description:
-      "Lance Camille (Contenu & Site) pour proposer des posts réseaux sociaux et/ou du contenu de site web. Si une actualité réelle a été mentionnée par l'utilisateur, passe-la — sinon laisse vide, elle proposera ses propres idées génériques. Ne jamais inventer une actualité.",
+      "Lance Camille (Contenu & Site) pour proposer des posts réseaux sociaux et/ou du contenu de site web. Si une actualité réelle a été mentionnée par l'utilisateur, passe-la — sinon laisse vide, elle proposera ses propres idées génériques. Ne jamais inventer une actualité. Crée l'action correspondante dans le plan.",
     inputSchema: z.object({
+      ...planActionFields,
       newsContext: z
         .string()
         .optional()
         .describe("Actualité à communiquer, telle que mentionnée par l'utilisateur — omettre si aucune n'a été donnée"),
     }),
-    run: async (input) => {
-      try {
-        const proposals = await runContenuAgent(companyId, input.newsContext);
-        return `${proposals.length} proposition(s) créée(s) par ${PERSONAS.contenu.name}, en attente de validation dans le dashboard.`;
-      } catch (error) {
-        console.error("Erreur délégation contenu:", error);
-        return `ÉCHEC, rien n'a été créé : ${agentFailureMessage(error, PERSONAS.contenu.name)}`;
-      }
-    },
+    run: (input) => delegateThroughPlan("contenu", input, { newsContext: input.newsContext }),
   });
 
   const delegateDemarchage = betaZodTool({
     name: "delegate_demarchage",
     description:
-      "Lance l'agent Démarchage : recherche des pistes de croissance réelles (actualités, événements locaux) et, si un type de prospects a été décrit par l'utilisateur, prépare des templates de prospection générique.",
+      "Lance l'agent Démarchage : recherche des pistes de croissance réelles (actualités, événements locaux) et, si un type de prospects a été décrit par l'utilisateur, prépare des templates de prospection générique. Crée l'action correspondante dans le plan.",
     inputSchema: z.object({
+      ...planActionFields,
       prospectDescription: z
         .string()
         .optional()
         .describe("Type de prospects visés, tel que mentionné par l'utilisateur — omettre si non précisé"),
     }),
-    run: async (input) => {
-      try {
-        const proposals = await runDemarchageAgent(companyId, input.prospectDescription);
-        return `${proposals.length} proposition(s) créée(s) par ${PERSONAS.demarchage.name}, en attente de validation dans le dashboard.`;
-      } catch (error) {
-        console.error("Erreur délégation demarchage:", error);
-        return `ÉCHEC, rien n'a été créé : ${agentFailureMessage(error, PERSONAS.demarchage.name)}`;
-      }
-    },
+    run: (input) => delegateThroughPlan("demarchage", input, { prospectDescription: input.prospectDescription }),
   });
 
   const { finalMessage, usage } = await runToolLoop(anthropic.beta.messages.toolRunner({
@@ -163,6 +173,7 @@ Règles strictes, non négociables :
 - Avant de proposer une priorité ou de déléguer, appelle get_current_status pour partir du plan en cours et du suivi des prospects : ne propose pas ce qui est déjà au plan, et appuie-toi sur ce que le dirigeant t'a déjà dit dans cette conversation plutôt que de le lui redemander.
 - Si un outil delegate_* répond « ÉCHEC », dis clairement au dirigeant que l'agent n'a rien produit et qu'il peut relancer : ne présente jamais un échec comme un travail fait.
 - Tu ne fais JAMAIS exécuter une action réelle toi-même, même automatiquement : déléguer ne fait que créer des propositions, qui restent soumises à la validation du dirigeant dans le dashboard. Dis-le clairement si tu délègues.
+- Chaque délégation crée une action dans le plan, avec le brief que tu rédiges, et les productions y sont rattachées : dis au dirigeant qu'il la retrouvera dans son plan. Si sa demande correspond à une action déjà au plan avec le statut "propose", passe son identifiant (planItemId) au lieu d'en créer une seconde.
 - Tu ne construis pas de site web toi-même (${PERSONAS.contenu.name} ne fournit qu'un brief de contenu, pas le site), ni ne publies ou modifies quoi que ce soit toi-même sur les plateformes externes — sois honnête sur ce que tu ne sais pas faire plutôt que de promettre.
 - Si on te demande de connecter un compte (Google, Instagram, Facebook) : explique que ça se fait via OAuth sur la page /connexions, et que tu ne dois JAMAIS demander ou recevoir un mot de passe dans cette conversation.
 - Pour déléguer à Contenu (sans actualité) ou Démarchage (sans cible), tu peux le faire sans information — les agents proposeront leurs propres idées génériques. Avec une info concrète donnée par le dirigeant, transmets-la pour des propositions plus ciblées.
