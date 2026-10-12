@@ -10,7 +10,7 @@ const ITEMS = [
   { href: "/rapport", label: "Résultats", group: "Activité" },
   { href: "/equipe", label: "Équipe", group: "Organisation" },
   { href: "/connexions", label: "Connexions", group: "Organisation" },
-  { href: "/onboarding", label: "Mon entreprise", group: "Organisation" },
+  { href: "/entreprise", label: "Mon entreprise", group: "Organisation" },
   { href: "/admin", label: "Administration", group: "Organisation" },
 ];
 
