@@ -2,7 +2,7 @@ import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
-import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { getRejectionContext, rejectedDuplicateNotice } from "@/lib/agents/rejection-context";
 import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import {
@@ -105,6 +105,8 @@ export async function runMarketingAgent(
         .describe("Contenu complet de la proposition, prêt à être relu et validé par l'utilisateur"),
     }),
     run: async (input) => {
+      const alreadyRejected = await rejectedDuplicateNotice(company.id, { kind: input.kind, title: input.title, content: input.content });
+      if (alreadyRejected) return alreadyRejected;
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,

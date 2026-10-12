@@ -2,7 +2,7 @@ import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
-import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { getRejectionContext, rejectedDuplicateNotice } from "@/lib/agents/rejection-context";
 import { getFindingsContextForContent } from "@/lib/agents/findings-context";
 import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
@@ -53,6 +53,8 @@ export async function runContenuAgent(
         .describe("Contenu complet, prêt à être relu et validé (pour un post : légende + visuel suggéré + date)"),
     }),
     run: async (input) => {
+      const alreadyRejected = await rejectedDuplicateNotice(company.id, { kind: input.kind, title: input.title, content: input.content });
+      if (alreadyRejected) return alreadyRejected;
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,

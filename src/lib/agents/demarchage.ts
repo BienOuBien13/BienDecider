@@ -2,7 +2,7 @@ import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
-import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { getRejectionContext, rejectedDuplicateNotice } from "@/lib/agents/rejection-context";
 import { getCompetitionContextForProspecting } from "@/lib/agents/findings-context";
 import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
@@ -55,6 +55,8 @@ export async function runDemarchageAgent(
     }),
     run: async (input) => {
       const content = `${input.content}\n\nSource : ${input.source}`;
+      const alreadyRejected = await rejectedDuplicateNotice(company.id, { kind: "piste_croissance", title: input.title, content: content });
+      if (alreadyRejected) return alreadyRejected;
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
@@ -90,6 +92,8 @@ export async function runDemarchageAgent(
       const content = `${input.reason}\n\nType de cible : ${input.segment}${
         input.publicContact ? `\nContact professionnel public : ${input.publicContact}` : ""
       }\nSource : ${input.source}`;
+      const alreadyRejected = await rejectedDuplicateNotice(company.id, { kind: "prospect", title: input.name, content: content });
+      if (alreadyRejected) return alreadyRejected;
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
@@ -133,6 +137,8 @@ export async function runDemarchageAgent(
     }),
     run: async (input) => {
       const content = `Objet : ${input.subject}\n\n${input.body}\n\n⚠️ Template générique à adapter manuellement avant tout envoi. Vérifiez votre base de contacts et le cadre légal de la prospection (RGPD) avant envoi — en cas de doute, consultez un expert Conformité/Juridique.`;
+      const alreadyRejected = await rejectedDuplicateNotice(company.id, { kind: "prospecting_email", title: input.title, content: content });
+      if (alreadyRejected) return alreadyRejected;
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
