@@ -58,7 +58,7 @@ Gmail manuel : voir [docs/oauth-setup.md](docs/oauth-setup.md) pour `GMAIL_OAUTH
 
 Test public de marque (aucune donnée créée ni appel agent) : `npm run test:brand`, avec un serveur local actif et Chromium installé. Vérifie les métadonnées, la langue, les liens de contact et les pages publiques de 320 à 1440 px.
 
-Avec le serveur local actif : `npx playwright install chromium`, puis `npm run test:ux`.
+Avec le serveur local actif : `npx playwright install chromium`, puis `npm run test:ux`. Tests de sécurité (cookies falsifiés, verrouillage, isolation entre entreprises) : `npm run test:security`, avec `ADMIN_EMAILS` défini côté serveur ; toute nouvelle route API doit y être déclarée.
 Les tests utilisent `DATABASE_URL` et `SESSION_SECRET` du fichier `.env`. Ils créent uniquement des entreprises fictives `ux-test-…@example.invalid`, supprimées en fin de test. Par sécurité, ils refusent toute base non locale ; `UX_TEST_ALLOW_REMOTE_DB=1` les autorise sur une base de développement distante dédiée, jamais sur celle du prototype. Les appels aux agents et la publication sont simulés ; les décisions et l'ajout au plan utilisent les vraies API. `UX_TEST_BASE_URL` permet de changer le port (défaut : `http://localhost:3000`). Captures desktop/mobile dans `test-results/` (ignoré par Git).
 
 ## Déploiement (Vercel)
