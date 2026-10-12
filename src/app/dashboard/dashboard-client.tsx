@@ -8,6 +8,7 @@ import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
 import { ProposalCard } from "@/components/proposal-card";
 import { JourneyProgress } from "@/components/journey-progress";
+import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[] };
 type View = "plan" | "validation" | "historique";
@@ -26,6 +27,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
   initialView: View;
   riskSettings: Record<string, string>;
 }) {
+  const { requestProfile, profileDialog, checking } = useAgentProfileCompletion();
   const [planItems, setPlanItems] = useState(initialPlanItems);
   const [proposals, setProposals] = useState(initialProposals);
   const [chatMessages, setChatMessages] = useState(initialChatMessages);
@@ -239,7 +241,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
                     {item.status === "propose" ? (
                       <div className="flex items-center gap-3">
                         <button onClick={() => setDiscardingId(discardingId === item.id ? null : item.id)} disabled={locked} className="text-xs text-slate-500 disabled:opacity-50">Écarter</button>
-                        <button onClick={() => handleLaunch(item)} disabled={locked} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50">{busyId === item.id ? "En préparation…" : "Lancer"}</button>
+                        <button onClick={() => void requestProfile(item.agent as AgentKey, () => handleLaunch(item))} disabled={locked || checking} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50">{busyId === item.id ? "En préparation…" : "Lancer"}</button>
                       </div>
                     ) : (
                       <Link href={count > 0 ? "/dashboard?view=validation" : "/dashboard?view=historique"} className="text-sm text-indigo-600 underline">{count > 0 ? `${count} à examiner` : "Voir la production"}</Link>
@@ -281,6 +283,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
           <Link href="/diagnostic" className="inline-block text-sm text-indigo-600 underline">Consulter le diagnostic</Link>
         </section>
       )}
+      {profileDialog}
       <details className="mt-6 border-t border-slate-200 py-5">
         <summary className="flex cursor-pointer items-center gap-3 font-medium"><PersonaAvatar agentKey="co_ceo" size={32} />Faire le point avec {PERSONAS.co_ceo.name}</summary>
         <div className="mt-5 grid gap-6 lg:grid-cols-2">

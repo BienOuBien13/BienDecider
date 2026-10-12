@@ -27,6 +27,7 @@ const test = base.extend<{ company: Company }>({
     const company = await prisma.company.create({ data: {
       ownerEmail, name: "Atelier Test Parcours", trade: "Artisan", servingArea: "Paris",
       objective: "Développer les demandes de devis", monthlyRevenue: 4000, revenueTarget: 6000, averageClientValue: 500,
+      description: "Artisan de proximité", phone: "0100000000", certifications: "Label de test", openingHours: "Lundi au vendredi",
     } });
     try {
       const encoded = Buffer.from(ownerEmail).toString("base64url");
@@ -429,7 +430,7 @@ test("clearing optional company profile fields removes them from storage and age
 
   try {
     await prisma.company.update({ where: { id: company.id }, data: previousProfile });
-    await page.goto(`${baseURL}/onboarding`);
+    await page.goto(`${baseURL}/entreprise`);
     await expect(page.getByPlaceholder("Site web (optionnel — beaucoup de TPE n'en ont pas)")).toHaveValue(previousProfile.website);
     await expect(page.locator('input[placeholder^="Compte Instagram/Facebook"]')).toHaveValue(previousProfile.socialHandles);
 
@@ -492,6 +493,101 @@ test("natural-language onboarding previews extracted fields and asks for missing
     expect(saved.trade).toBe("Plomberie");
     expect(saved.servingArea).toBe("Lille et alentours");
     expect(saved.objective).toBe("Trouver cinq nouveaux clients par mois");
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("guided onboarding starts with three fields and keeps the full company page available", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    await prisma.company.update({ where: { id: company.id }, data: {
+      name: "", trade: "", servingArea: "", objective: null, description: null, phone: null,
+      certifications: null, openingHours: null, website: null, socialHandles: null,
+    } });
+    await page.goto(`${baseURL}/onboarding`);
+    await expect(page.getByRole("button", { name: "Valider et lancer mon audit" })).toBeEnabled();
+    await expect(page.locator("form input")).toHaveCount(3);
+    await expect(page.getByPlaceholder("CA mensuel actuel (€)")).toHaveCount(0);
+    await page.getByPlaceholder("Nom commercial").fill("Atelier Minimal");
+    await page.getByPlaceholder("Votre métier (ex: plombier, restaurant...)").fill("Plomberie");
+    await page.getByPlaceholder("Zone de chalandise (ex: Lyon et alentours)").fill("Lille");
+    await page.getByRole("button", { name: "Valider et lancer mon audit" }).click();
+    await expect(page).toHaveURL(`${baseURL}/dashboard`);
+    const saved = await prisma.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.name).toBe("Atelier Minimal");
+    expect(saved.trade).toBe("Plomberie");
+    expect(saved.servingArea).toBe("Lille");
+    expect(saved.objective).toBeNull();
+    expect(saved.phone).toBeNull();
+    await page.getByRole("link", { name: "Mon entreprise", exact: true }).first().click();
+    await expect(page).toHaveURL(`${baseURL}/entreprise`);
+    await expect(page.getByRole("heading", { name: "Mon entreprise", exact: true })).toBeVisible();
+    await expect(page.getByPlaceholder("Nom commercial")).toHaveValue("Atelier Minimal");
+    await expect(page.getByPlaceholder("CA mensuel actuel (€)")).toBeVisible();
+    await expect(page.getByPlaceholder("Téléphone affiché aux clients (optionnel)")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Démarrer en une phrase" })).toHaveCount(0);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("agents request only missing profile details and wait for successful partial saving", async ({ page, company }, testInfo) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  let agentCalls = 0;
+  try {
+    await prisma.company.update({ where: { id: company.id }, data: {
+      description: null, phone: null, certifications: null, openingHours: null, website: null,
+    } });
+    await page.route("**/api/agents/contenu/run", (route) => {
+      agentCalls += 1;
+      return route.fulfill({ json: { proposals: [] } });
+    });
+    await page.goto(`${baseURL}/equipe`);
+    const camille = page.locator("section").filter({ has: page.getByRole("heading", { name: "Camille", exact: true }) });
+    await camille.getByText("Demande ponctuelle", { exact: true }).click();
+    await camille.getByRole("button", { name: "Confier la demande" }).click();
+    const dialog = page.getByRole("dialog", { name: "Compléments pour Camille" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("Objectif principal (facultatif)")).toHaveCount(0);
+    await expect(dialog.getByLabel("Site web (facultatif)")).toHaveCount(0);
+    expect(agentCalls).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath("profile-details-desktop.png"), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: testInfo.outputPath("profile-details-mobile.png"), fullPage: true });
+    await dialog.getByLabel("Activité et savoir-faire (facultatif)").fill("Dépannage et rénovation");
+    await dialog.getByLabel("Téléphone affiché aux clients (facultatif)").fill("0102030405");
+    await page.route("**/api/companies", async (route) => {
+      if (route.request().method() === "PATCH") await route.fulfill({ status: 500, json: { error: "Compléments non enregistrés" } });
+      else await route.continue();
+    });
+    await dialog.getByRole("button", { name: "Enregistrer et continuer" }).click();
+    await expect(dialog.getByRole("alert")).toHaveText("Compléments non enregistrés");
+    expect(agentCalls).toBe(0);
+    await expect(dialog.getByLabel("Téléphone affiché aux clients (facultatif)")).toHaveValue("0102030405");
+    await page.unroute("**/api/companies");
+    await dialog.getByRole("button", { name: "Enregistrer et continuer" }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole("status")).toContainText("Demande traitée");
+    expect(agentCalls).toBe(1);
+    const saved = await prisma.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.description).toBe("Dépannage et rénovation");
+    expect(saved.phone).toBe("0102030405");
+    expect(saved.monthlyRevenue).toBe(company.monthlyRevenue);
+    expect(saved.objective).toBe(company.objective);
+    expect(saved.website).toBeNull();
+    for (const invalid of [{ phone: 42 }, { phone: "x".repeat(101) }, { companyId: "another-company", phone: "999" }]) {
+      expect((await page.request.patch(`${baseURL}/api/companies`, { data: invalid })).status()).toBe(400);
+    }
+    await camille.getByRole("button", { name: "Confier la demande" }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("Téléphone affiché aux clients (facultatif)")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Annuler", exact: true }).click();
+    expect(agentCalls).toBe(1);
+    await camille.getByRole("button", { name: "Confier la demande" }).click();
+    await dialog.getByRole("button", { name: "Continuer sans complément" }).click();
+    await expect(page.getByRole("status")).toContainText("Demande traitée");
+    expect(agentCalls).toBe(2);
   } finally {
     await prisma.$disconnect();
   }
