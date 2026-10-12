@@ -10,7 +10,7 @@ Tranche `del-5` livrée le 2026-10-10 : facteurs de risque déterministes par ty
 
 Ce document conserve l'historique et les décisions. Les cases ci-dessous reflètent leur date de rédaction ; ne pas les maintenir en parallèle du statut des Issues. Le catalogue initial [github-backlog.json](github-backlog.json) importe uniquement les US de travail restant, sans recréer toutes les livraisons passées. Les changements de statut se font dans GitHub, l'import ne les écrase pas.
 
-Délégation prototype (décision du 2026-10-10) : fusion autonome traçable après **4 secondes** sans réponse à la demande de relecture, ou indisponibilité annoncée, pour **tous les niveaux de risque**, y compris sécurité, données, envoi externe et CI/protections. PR et CI toujours obligatoires ; relecture différée et risques documentés. Voir [ci-cd.md](ci-cd.md). Les garde-fous des actions métier et la coordination des modifications de base restent inchangés.
+Gouvernance GitHub : les PR vers `main` sont obligatoires. La cible proposée est une approbation humaine et les checks requis avant fusion ; l'auto-merge peut alors fusionner automatiquement dès que toutes ces conditions sont satisfaites. Aucun délai de 4 secondes ne remplace une revue, et aucun auto-merge ne contourne les règles CODEOWNERS. Voir [ci-cd.md](ci-cd.md). Les garde-fous des actions métier et la coordination des modifications de base restent inchangés.
 
 Source : cahier des charges proposé par un tiers (OpenAI), challengé et ajusté le 2026-10-05.
 Décision CEO actée : garder l'esprit ("équipe virtuelle IA qui agit, pas qui conseille") sans construire la plateforme complète proposée — cf. [process-build-agentique.md](process-build-agentique.md) pour l'historique des décisions.

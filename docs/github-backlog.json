@@ -1,8 +1,8 @@
 [
   {
     "id": "github-governance", "title": "Proteger main et activer la delegation prototype", "priority": "p0", "status": "ready", "area": "external", "domain": "plateforme",
-    "story": "En tant que developpeur, je veux une PR et une CI obligatoires avec delegation apres 4 secondes sans reponse, pour tous les niveaux de risque, pour ne pas bloquer le prototype.",
-    "acceptance": ["main exige une PR, Checks vert et branche a jour ; force-push et suppression interdits", "0 approbation obligatoire configuree ; delegation apres 4 secondes sans reponse ou indisponibilite annoncee, tous niveaux de risque, avec justification et relecture differee", "Les deux auteurs peuvent deployer via Vercel ; Node 24 et Production Branch main confirmes"],
+    "story": "En tant que developpeur, je veux une PR avec approbation humaine et CI obligatoires, puis une fusion automatique quand les protections sont satisfaites, pour reduire les manipulations sans sacrifier la revue.",
+    "acceptance": ["main exige une PR, une approbation et Checks vert sur une branche a jour ; force-push et suppression interdits", "L'auto-merge attend toutes les approbations et checks requis ; aucun bypass ni fusion apres un simple delai", "Les deux auteurs peuvent deployer via Vercel ; Node 24 et Production Branch main confirmes"],
     "validation": "Verifier les reglages GitHub/Vercel et une PR par delegation tracee ; joindre les preuves sans secrets.", "scope": "Configuration administrateur ; CI deja livree. Pas de bypass des controles ni suppression des garde-fous des actions metier."
   },
   {

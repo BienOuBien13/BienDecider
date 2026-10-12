@@ -8,9 +8,9 @@
 
 ```text
 main à jour → petite branche → travail local → pull request vers main
-           → CI verte (lint, migrations, build, tests navigateur) + relecture
-             (obligatoire sur les zones sensibles, délégation possible ailleurs)
-           → Squash and merge → Vercel déploie main → test de fumée automatique
+                → une approbation + CI verte (lint, migrations, build, tests navigateur)
+                → auto-merge squash dès que les protections sont satisfaites
+                → Vercel déploie main → test de fumée automatique
 ```
 
 Les branches de travail ne sont pas déployées par Vercel : `vercel.json` désactive les déploiements Git de toutes les branches sauf `main`. Il reste possible de lancer manuellement un déploiement Vercel ; ne pas le faire pour une branche de travail dans ce processus.
@@ -50,9 +50,9 @@ Ces réglages de comptes ne sont pas appliqués par les fichiers du dépôt. Un 
    gh api -X POST repos/groupebienoubien/BienDecider/rulesets --input .github/rulesets/main.json
    ```
 
-   Il impose sur `main` : pull request obligatoire, contrôle **`Checks`** requis sur une branche à jour, fusion par squash uniquement, force-push et suppression interdits, aucun bypass, y compris pour les administrateurs.
-3. Le ruleset garde **0 approbation obligatoire** en général, mais exige l'approbation d'un propriétaire de code pour les chemins listés dans [../.github/CODEOWNERS](../.github/CODEOWNERS) : base de données, CI et déploiement, authentification et OAuth, actions externes. L'auteur ne peut pas approuver sa propre PR : sur ces chemins, c'est donc toujours l'autre développeur qui valide.
-4. Dans **Settings > General**, n'autoriser que **Squash merging** et activer la suppression automatique des branches fusionnées.
+   Il impose sur `main` : pull request obligatoire, **une approbation humaine**, contrôle **`Checks`** requis sur une branche à jour, fusion par squash uniquement, force-push et suppression interdits, aucun bypass, y compris pour les administrateurs.
+3. Le ruleset exige aussi l'approbation d'un propriétaire de code pour les chemins listés dans [../.github/CODEOWNERS](../.github/CODEOWNERS) : base de données, CI et déploiement, authentification et OAuth, actions externes. L'auteur ne peut pas approuver sa propre PR : un autre développeur doit valider.
+4. Dans **Settings > General > Pull Requests**, n'autoriser que **Squash merging**, activer **Allow auto-merge** et la suppression automatique des branches fusionnées. L'auto-merge ne contourne ni l'approbation, ni CODEOWNERS, ni les checks requis : GitHub fusionne seulement quand toutes les règles sont satisfaites.
 5. Dans **Settings > Advanced Security**, activer **Secret scanning**, **Push protection** et les **alertes Dependabot** (gratuits sur un dépôt public).
 
 Si les protections ne sont pas disponibles avec le forfait/visibilité du dépôt, la CI fonctionne, mais le blocage des fusions est seulement une règle d'équipe : décider d'un forfait compatible si un verrou technique est nécessaire.
@@ -103,38 +103,13 @@ Lier l'US avec `Closes #numero` seulement si tous ses critères sont livrés, si
 
 Pour `test:brand`, lancer le serveur et Chromium comme indiqué dans [../README.md](../README.md). `test:ux` crée et supprime des entreprises de test dans la base pointée par `DATABASE_URL` : **ne pas le lancer automatiquement sur la base du prototype**. La suite refuse toute base non locale, sauf `UX_TEST_ALLOW_REMOTE_DB=1` réservé à une base de développement dédiée ; la CI la lance à chaque PR sur sa propre base jetable.
 
-### 3. Relire et fusionner
+### 3. Relire et fusionner automatiquement
 
-L'autre développeur fait une relecture courte et approuve. Si la PR touche un chemin de [CODEOWNERS](../.github/CODEOWNERS), GitHub bloque la fusion tant qu'il n'a pas approuvé. Attendre **Checks vert** ; si `main` a évolué, mettre à jour la branche via GitHub, résoudre les conflits et attendre la nouvelle CI. Fusionner avec **Squash and merge**. Le développeur qui fusionne vérifie que le workflow **Smoke test** passe après le déploiement, puis le parcours touché sur le domaine. Le second repart de `main` à jour pour son prochain changement.
+L'autre développeur fait une relecture courte et approuve. Si la PR touche un chemin de [CODEOWNERS](../.github/CODEOWNERS), cette approbation doit venir d'un propriétaire de code. L'auteur choisit **Enable auto-merge** en squash ; GitHub attend l'approbation, **Checks vert** et une branche à jour avant de fusionner. Si `main` évolue, résoudre les conflits et attendre les nouveaux checks. Après fusion, l'auteur vérifie le workflow **Smoke test**, Vercel et le parcours touché sur le domaine. Chacun repart de `main` à jour pour son prochain changement.
 
-### 4. Délégation en cas d'indisponibilité
+### 4. Indisponibilité
 
-**Décision prototype du 2026-10-10, restreinte le même jour aux zones non sensibles :** délégation permanente et réciproque après **4 secondes** sans réponse à la demande de relecture, ou dès qu'une indisponibilité est annoncée, **pour tout changement qui ne touche aucun chemin de [CODEOWNERS](../.github/CODEOWNERS)**. Aucun bypass de CI ni push direct sur `main`. Sur ces changements, la relecture peut avoir lieu après la fusion.
-
-| Situation | Qui valide/fusionne ? |
-|---|---|
-| L'autre développeur est disponible | Relecture courte par l'autre, puis fusion avec Checks vert. |
-| Un remplaçant est désigné | Il relit la PR ; donner l'accès GitHub nécessaire, sans partager un compte. |
-| Hors zones sensibles : indisponibilité annoncée, ou aucune réponse après 4 secondes | L'auteur peut fusionner avec les conditions ci-dessous. |
-| Zones sensibles de CODEOWNERS : base de données, CI/protections/déploiement, authentification, OAuth/tokens, envoi externe, publication, cron | **Pas de délégation.** L'approbation de l'autre développeur est exigée par GitHub avant la fusion. En cas d'absence prolongée, désigner un remplaçant et l'ajouter à CODEOWNERS par une PR approuvée. |
-
-**Risque accepté :** 4 secondes ne constituent pas une fenêtre de relecture réaliste. Une modification hors zones sensibles peut être mise en ligne avant qu'un autre développeur l'ait examinée. Une CI verte n'atteste pas de la sécurité ou de l'absence de perte de données. Cette délégation ne supprime ni les sauvegardes, ni la coordination des modifications de base, ni les confirmations utilisateur des envois externes.
-
-Avant fusion autonome : PR petite, liée à son Issue, branche à jour, **Checks vert sur le dernier commit**, tests ciblés et plan de retour arrière. Ajouter le label `review-deferred`, mentionner l'autre développeur et laisser ce commentaire :
-
-```text
-Fusion par délégation prototype
-Motif : indisponibilité annoncée / absence de réponse après 4 secondes.
-Demande de relecture : <lien du commentaire, date et heure>.
-Risque et impacts : <faible ou fort ; sécurité, données, envois, configuration concernés>.
-Vérification : <tests, captures, lien CI>.
-Retour arrière : <revert/rollback compatible>.
-Relecture différée demandée à @<login> au prochain jour ouvré disponible.
-```
-
-Après fusion, l'auteur vérifie Vercel et le parcours touché ; l'autre développeur relit au prochain jour ouvré disponible et retire `review-deferred` après son commentaire. Une anomalie ouvre une Issue de correction. Un agent peut aider à la relecture, mais son avis n'est pas une approbation humaine GitHub.
-
-**Limite assumée :** hors CODEOWNERS, avec 0 approbation obligatoire, GitHub ne bloque pas techniquement une fusion sans relecture. Le délai de 4 secondes est une convention documentée, pas une automatisation de fusion. Un fichier sensible oublié dans CODEOWNERS n'est pas protégé : l'y ajouter dès qu'il apparaît. Si cette règle ne convient plus, passer à 1 approbation obligatoire dans le ruleset ; ne pas accorder un bypass global qui contournerait aussi `Checks`.
+L'auto-merge ne remplace pas l'approbateur. Si aucun approbateur n'est disponible, la PR attend : ne pas contourner le ruleset et ne pas utiliser un délai artificiel. Pour une indisponibilité prolongée, désigner un remplaçant et lui donner l'accès nécessaire. Les protections de `main` restent identiques pour tous les chemins.
 
 Pas de push de branche après fusion pour republier : la fusion déclenche déjà le déploiement. Les commits de documentation sur `main` peuvent aussi déclencher un build Vercel ; c'est assumé pour conserver un processus uniforme.
 

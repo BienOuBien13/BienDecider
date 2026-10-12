@@ -9,6 +9,7 @@ Chaque US contient le besoin utilisateur, des criteres d'acceptation, les depend
 ## Vues utiles sans outil supplementaire
 
 - [US ouvertes](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus).
+- [Sans responsable](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus%20no%3Aassignee).
 - [Pretes a prendre](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Aready).
 - [Mon travail](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20assignee%3A%40me).
 - [A relire](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Areview).
@@ -46,11 +47,24 @@ Réglages admin dynamiques (P1) : procédure de rôle explicite, table et déplo
 
 ## Routine quotidienne a deux
 
+### Répartition sans fichiers partagés
+
+Répartition de départ à confirmer ensemble, avec un seul pilote par Issue :
+
+| Responsable | Prend en charge | Propriété de fichiers habituelle |
+|---|---|---|
+| RemiJolivalt (Remi) | Décisions produit, UX, contenu/documentation produit, démarches externes et consoles fournisseur (`area:external`) | `src/app/` hors `src/app/api/`, `src/components/`, styles, pages et docs produit |
+| samirt-hue (Samir) | Implémentation API/backend, sécurité, connecteurs, base, CI/CD et déploiement (`area:dev` technique) | `src/app/api/`, `src/lib/`, `prisma/`, `scripts/`, `.github/`, configuration de déploiement |
+
+Une US transverse reçoit un pilote unique qui possède l'Issue et la PR ; l'autre n'ouvre pas de changement concurrent sur les mêmes fichiers. Si le travail peut réellement être séparé, découper en deux Issues/PR avec un contrat d'API ou d'interface convenu avant le codage. Pour les fichiers de [CODEOWNERS](../.github/CODEOWNERS), le propriétaire non-auteur relit et approuve toujours. Ne pas déduire une assignation uniquement du tableau : confirmer la disponibilité puis renseigner **Assignees** sur l'Issue.
+
+Le filtre [US ouvertes sans responsable](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus%20no%3Aassignee) permet de faire le tri. Les US `backlog` ne sont pas toutes à assigner immédiatement : attribuer le propriétaire quand une US P0/P1 passe à `ready` et avant `in-progress`. Ne jamais laisser une US `in-progress` sans responsable.
+
 1. Choisir ensemble les deux prochaines US, selon priorite et dependances. Mettre a jour les criteres si necessaire. Chacun commence par une seule US active.
 2. Dans **Assignees**, assigner une personne responsable. Ne pas affecter silencieusement une US a l'autre ; confirmer qu'elle est disponible. Un second participant peut etre mentionne dans le corps.
 3. Avant de coder, passer a `status:in-progress` et nommer la branche `feat/<numero>-description` ou `fix/<numero>-description`. Pour une demarche externe, le responsable suit la console et note la decision dans l'Issue.
-4. Ouvrir la PR vers `main`, ajouter `Closes #numero` si elle livre tous les criteres, sinon `Refs #numero`. Passer l'US a `status:review` et demander la relecture. Appliquer la delegation de [ci-cd.md](ci-cd.md) apres 4 secondes sans reponse ou indisponibilite annoncee, hors zones sensibles de CODEOWNERS ou l'approbation de l'autre developpeur est obligatoire ; l'Issue ne vaut pas autorisation d'ignorer la CI. Documenter impacts, tests et retour arriere, puis demander une relecture differee.
-5. Apres Checks vert et validation/delegation, fusionner. GitHub ferme automatiquement l'US liee par `Closes` lorsque la PR arrive sur `main`. L'auteur confirme Vercel et la recette dans l'Issue ; retirer le label de statut devenu inutile. Si le deploiement ou les criteres echouent, rouvrir et noter le probleme.
+4. Ouvrir la PR vers `main`, ajouter `Closes #numero` si elle livre tous les criteres, sinon `Refs #numero`. Passer l'US a `status:review`, demander la relecture et activer **Auto-merge**. GitHub fusionne en squash uniquement quand l'approbation exigée, `Checks` et les autres protections sont satisfaits ; un push qui invalide l'approbation ou relance les checks suspend la fusion.
+5. Apres la fusion, l'auteur confirme Vercel et la recette dans l'Issue ; retirer le label de statut devenu inutile. Si le deploiement ou les criteres echouent, rouvrir et noter le probleme.
 6. Si bloque, mettre `status:blocked`, expliquer le blocage, qui peut agir et la prochaine verification. Repasser a ready quand les dependances sont levees ; ce changement n'est pas automatise sur une simple fermeture d'Issue dependante.
 
 Petit point de 10 minutes une fois par semaine : trier P0/P1, revoir les blocages, retirer les US obsoletes avec une raison et traiter les relectures `review-deferred`. Mettre a jour le contexte Markdown seulement quand une decision produit/architecture change.
@@ -70,7 +84,7 @@ Le script recherche un identifiant stable `<!-- biendecider-us:... -->` dans les
 ## Limites et droits
 
 - Si le workflow n'a pas le droit de creer les Issues, un administrateur doit autoriser GitHub Actions et les permissions demandees, puis relancer. Les logs affichent les liens crees, jamais de secret.
-- L'import ne devine pas le login du second developpeur et n'assigne personne automatiquement. Les deux collaborateurs choisissent leur responsable dans Assignees.
+- L'import ne devine pas le login des developpeurs et n'assigne personne automatiquement. Les deux collaborateurs choisissent le responsable dans Assignees ; l'auto-merge n'attribue pas de responsable et ne remplace pas une approbation.
 - Aucun statut ne prouve un resultat fournisseur : l'envoi Gmail accepte n'est pas une preuve de livraison, OAuth n'est pas une publication, et une PR fusionnee peut encore echouer au deploiement.
 - Le depot est public : aucun secret, donnees client, adresse personnelle de destination ou identifiant de reviewer prive dans les Issues. Partager les acces via le gestionnaire de secrets, pas le ticket.
 

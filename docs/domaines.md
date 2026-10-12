@@ -27,7 +27,7 @@ Vue par domaine : `https://github.com/groupebienoubien/BienDecider/issues?q=is%3
 
 État vérifié dans les Issues ouvertes le **2026-10-10** : [7 US `domaine:delegation` en P1](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Adelegation%20label%3Apriority%3Ap1), 3 US en P2. Les priorités sont déjà correctement étiquetées ; ne pas promouvoir automatiquement les P2.
 
-**Attention au vocabulaire :** ce domaine concerne l'autonomie de BienDecider dans les actions des entreprises. Ce n'est pas la délégation de revue des PR aux développeurs après 4 secondes, documentée dans [ci-cd.md](ci-cd.md).
+**Attention au vocabulaire :** ce domaine concerne l'autonomie de BienDecider dans les actions des entreprises. Ce n'est pas l'auto-merge des PR, qui attend une approbation humaine et les checks obligatoires selon [ci-cd.md](ci-cd.md).
 
 Ordre fondé sur les dépendances des US :
 
