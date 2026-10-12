@@ -45,6 +45,7 @@ const GUARDED_ROUTES: Guarded[] = [
   { method: "GET", path: "/api/proposals", denied: 401 },
   { method: "PATCH", path: "/api/proposals/[id]", denied: 401 },
   { method: "POST", path: "/api/proposals/[id]/execute", denied: 401 },
+  { method: "POST", path: "/api/onboarding/interpret", denied: 401 },
 ];
 
 // Routes volontairement accessibles sans session, avec la raison.

@@ -406,3 +406,44 @@ test("clearing optional company profile fields removes them from storage and age
     await prisma.$disconnect();
   }
 });
+
+test("natural-language onboarding previews extracted fields and asks for missing required details one at a time", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    await prisma.company.update({ where: { id: company.id }, data: { name: "", trade: "", servingArea: "", objective: null } });
+    await page.route("**/api/onboarding/interpret", (route) => route.fulfill({ json: { profile: {
+      name: "Atelier Exemple", trade: "Plomberie", servingArea: "", objective: "",
+    } } }));
+
+    await page.goto(`${baseURL}/onboarding`);
+    const sentencePanel = page.getByRole("region", { name: "Démarrer en une phrase" });
+    await sentencePanel.getByLabel("Décrivez votre activité et votre objectif en une phrase").fill("Je suis plombier et je cherche cinq clients par mois.");
+    await sentencePanel.getByRole("button", { name: "Préremplir mon profil" }).click();
+
+    await expect(sentencePanel.getByText("Information manquante : zone de chalandise")).toBeVisible();
+    await expect(page.getByPlaceholder("Nom commercial")).toHaveValue("Atelier Exemple");
+    await expect(page.getByPlaceholder("Votre métier (ex: plombier, restaurant...)")).toHaveValue("Plomberie");
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).name).toBe("");
+
+    await sentencePanel.locator("input").fill("Lille et alentours");
+    await sentencePanel.getByRole("button", { name: "Continuer", exact: true }).click();
+    await expect(sentencePanel.getByText("Information manquante : objectif")).toBeVisible();
+    await expect(page.getByPlaceholder("ex: 10 nouveaux clients par mois")).toHaveValue("");
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).servingArea).toBe("");
+
+    await sentencePanel.locator("input").fill("Trouver cinq nouveaux clients par mois");
+    await sentencePanel.getByRole("button", { name: "Continuer", exact: true }).click();
+    await expect(sentencePanel.getByText("Voici ce que j'ai compris. Vérifiez et corrigez les champs avant d'enregistrer.")).toBeVisible();
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).name).toBe("");
+
+    await page.getByRole("button", { name: "Valider et lancer mon audit" }).click();
+    await expect(page).toHaveURL(`${baseURL}/dashboard`);
+    const saved = await prisma.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.name).toBe("Atelier Exemple");
+    expect(saved.trade).toBe("Plomberie");
+    expect(saved.servingArea).toBe("Lille et alentours");
+    expect(saved.objective).toBe("Trouver cinq nouveaux clients par mois");
+  } finally {
+    await prisma.$disconnect();
+  }
+});

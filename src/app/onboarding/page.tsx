@@ -22,6 +22,12 @@ export default function OnboardingPage() {
   const [targetDate, setTargetDate] = useState("");
   const [averageClientValue, setAverageClientValue] = useState("");
   const [newClientsPerMonth, setNewClientsPerMonth] = useState("");
+  const [profileSentence, setProfileSentence] = useState("");
+  const [profileInterpreted, setProfileInterpreted] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [interpreting, setInterpreting] = useState(false);
+  const [interpretationError, setInterpretationError] = useState<string | null>(null);
+  const [missingAnswer, setMissingAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isNew, setIsNew] = useState(true);
@@ -49,8 +55,55 @@ export default function OnboardingPage() {
         setAverageClientValue(c.averageClientValue?.toString() ?? "");
         setNewClientsPerMonth(c.newClientsPerMonth?.toString() ?? "");
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setProfileLoaded(true));
   }, []);
+
+  const missingProfileFields = [
+    { key: "name", label: "nom commercial", value: name },
+    { key: "trade", label: "métier", value: trade },
+    { key: "servingArea", label: "zone de chalandise", value: servingArea },
+    { key: "objective", label: "objectif", value: objective },
+  ];
+  const nextMissingField = profileInterpreted
+    ? missingProfileFields.find((field) => !field.value.trim())
+    : undefined;
+
+  async function interpretProfileSentence() {
+    setInterpreting(true);
+    setInterpretationError(null);
+    try {
+      const response = await fetch("/api/onboarding/interpret", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sentence: profileSentence }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.profile) {
+        throw new Error(data?.error ?? "Impossible d'interpréter cette phrase.");
+      }
+      setName(data.profile.name ?? "");
+      setTrade(data.profile.trade ?? "");
+      setServingArea(data.profile.servingArea ?? "");
+      setObjective(data.profile.objective ?? "");
+      setProfileInterpreted(true);
+      setMissingAnswer("");
+    } catch (error) {
+      setInterpretationError(error instanceof Error ? error.message : "Interprétation indisponible.");
+    } finally {
+      setInterpreting(false);
+    }
+  }
+
+  function addMissingProfileField() {
+    if (!nextMissingField || !missingAnswer.trim()) return;
+    const value = missingAnswer.trim();
+    if (nextMissingField.key === "name") setName(value);
+    if (nextMissingField.key === "trade") setTrade(value);
+    if (nextMissingField.key === "servingArea") setServingArea(value);
+    if (nextMissingField.key === "objective") setObjective(value);
+    setMissingAnswer("");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,6 +159,42 @@ export default function OnboardingPage() {
             ? "Moins de 5 minutes. Vous pourrez tout modifier plus tard."
             : "Modifiez ces informations à tout moment — elles orientent directement vos agents."}
         </p>
+
+        {isNew && profileLoaded && (
+          <section aria-label="Démarrer en une phrase" className="mt-5 border-y border-slate-200 py-4">
+            <label htmlFor="profile-sentence" className="text-sm font-medium">Décrivez votre activité et votre objectif en une phrase</label>
+            <textarea
+              id="profile-sentence"
+              value={profileSentence}
+              onChange={(event) => setProfileSentence(event.target.value)}
+              maxLength={1200}
+              rows={3}
+              placeholder="Ex. Je suis plombière à Lille et je veux trouver 5 nouveaux clients par mois."
+              className="mt-2 w-full rounded border px-3 py-2 text-sm"
+            />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-slate-500">Paul propose un profil à vérifier ; rien n&apos;est enregistré avant votre confirmation.</p>
+              <button type="button" onClick={() => void interpretProfileSentence()} disabled={interpreting || profileSentence.trim().length < 8} className="rounded bg-indigo-700 px-3 py-2 text-sm text-white disabled:opacity-50">
+                {interpreting ? "Lecture de votre phrase…" : "Préremplir mon profil"}
+              </button>
+            </div>
+            {interpretationError && <p role="alert" className="mt-2 text-sm text-red-700">{interpretationError}</p>}
+            {profileInterpreted && (
+              <div aria-live="polite" className="mt-3 border-l-2 border-emerald-500 pl-3 text-sm text-slate-700">
+                <p className="font-medium">Voici ce que j&apos;ai compris. Vérifiez et corrigez les champs avant d&apos;enregistrer.</p>
+                {nextMissingField && (
+                  <div className="mt-3 flex flex-wrap items-end gap-2">
+                    <label className="min-w-48 flex-1 text-xs text-slate-600">
+                      Information manquante : {nextMissingField.label}
+                      <input value={missingAnswer} onChange={(event) => setMissingAnswer(event.target.value)} className="mt-1 w-full rounded border px-3 py-2 text-sm text-slate-900" />
+                    </label>
+                    <button type="button" onClick={addMissingProfileField} disabled={!missingAnswer.trim()} className="rounded bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50">Continuer</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
           <label className="text-sm font-medium">Quel est votre objectif principal ?</label>
