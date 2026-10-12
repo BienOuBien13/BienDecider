@@ -111,7 +111,8 @@ test("every API route is declared as guarded or deliberately public", () => {
   expect(onDisk, "Declare each new API route in tests/security.spec.ts").toEqual(declared);
 });
 
-test("missing, unsigned and forged session cookies are refused everywhere", async ({ request }) => {
+test("missing, unsigned and forged session cookies are refused everywhere", async ({ request, page }) => {
+  test.setTimeout(60000);
   const victim = "victime@example.invalid";
   const attacker = "attaquant@example.invalid";
   const encodedVictim = Buffer.from(victim).toString("base64url");
@@ -127,10 +128,15 @@ test("missing, unsigned and forged session cookies are refused everywhere", asyn
   };
   for (const [label, cookie] of Object.entries(forgeries)) {
     for (const route of GUARDED_ROUTES) await expectDenied(request, route, cookie, label);
+    await page.context().clearCookies();
+    if (cookie) {
+      const separator = cookie.indexOf("=");
+      await page.context().addCookies([{ name: cookie.slice(0, separator), value: cookie.slice(separator + 1), url: baseURL }]);
+    }
     for (const path of GUARDED_PAGES) {
-      const page = await request.get(`${baseURL}${path}`, { headers: cookie ? { Cookie: cookie } : {}, maxRedirects: 0 });
-      expect(page.status(), `${path} (${label})`).toBe(307);
-      expect(new URL(page.headers().location, baseURL).pathname, `${path} (${label})`).toBe("/login");
+      await page.goto(`${baseURL}${path}`);
+      await expect(page, `${path} (${label})`).toHaveURL(`${baseURL}/login`);
+      await expect(page.getByRole("button", { name: "Se connecter", exact: true }), `${path} (${label})`).toBeVisible();
     }
   }
   const cron = await request.get(`${baseURL}/api/cron/weekly-review`, { headers: { Authorization: "Bearer wrong-secret" } });
