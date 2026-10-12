@@ -12,7 +12,7 @@ test("BienDecider public identity, metadata, contact and responsive pages", asyn
   await expect(page.getByRole("link", { name: "Contact", exact: true })).toHaveAttribute("href", "mailto:contact@biendecider.com");
   for (const width of [320, 390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const path of ["/", "/login", "/cgu", "/confidentialite", "/mentions-legales"]) {
+    for (const path of ["/", "/login", "/signup", "/cgu", "/confidentialite", "/mentions-legales"]) {
       await page.goto(`${baseURL}${path}`);
       await expect(page.locator("h1")).toBeVisible();
       await expect(page).toHaveTitle("BienDecider");
@@ -27,4 +27,9 @@ test("BienDecider public identity, metadata, contact and responsive pages", asyn
     await page.goto(`${baseURL}${path}`);
     await expect(page.locator("main").getByRole("link", { name: "contact@biendecider.com", exact: true }).first()).toHaveAttribute("href", "mailto:contact@biendecider.com");
   }
+  await page.goto(`${baseURL}/login`);
+  await expect(page.getByRole("link", { name: "Créer un compte", exact: true })).toHaveAttribute("href", "/signup");
+  await page.goto(`${baseURL}/signup`);
+  await expect(page.getByRole("heading", { name: "Créer un compte", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Se connecter", exact: true })).toHaveAttribute("href", "/login");
 });
