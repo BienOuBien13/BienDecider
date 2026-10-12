@@ -12,6 +12,7 @@
     "test:brand": "playwright test tests/brand.spec.ts --workers=1",
     "test:gmail": "playwright test tests/gmail.spec.ts --workers=1",
     "test:delegation": "playwright test tests/delegation.spec.ts --workers=1",
+    "test:engine": "playwright test tests/engine.spec.ts --workers=1",
     "test:security": "playwright test tests/security.spec.ts --workers=1",
     "test:database-url": "node --experimental-strip-types --test tests/database-url.test.mjs",
     "postinstall": "prisma generate"

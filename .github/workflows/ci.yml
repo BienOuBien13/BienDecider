@@ -87,6 +87,8 @@ jobs:
         run: npm run test:ux
       - name: Security tests (forged cookies, lockout, cross-company isolation)
         run: npm run test:security
+      - name: Engine tests (Paul and agents around model calls, throwaway database)
+        run: npm run test:engine
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v7

@@ -10,9 +10,9 @@ import { runContenuAgent } from "@/lib/agents/contenu";
 import { runDemarchageAgent } from "@/lib/agents/demarchage";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import { getFunnelStats, funnelLines } from "@/lib/funnel";
+import { getChatInstructionsForPlan, getPlanAndFunnelStatus, loadRecentChatHistory } from "@/lib/agents/chat-context";
 
 const PERSONA = PERSONAS.co_ceo;
-const HISTORY_LIMIT = 20;
 
 /**
  * Agent "Partenaire de croissance" (Paul, ex-"Co-CEO" — cf. docs/backlog.md) :
@@ -31,11 +31,7 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
     data: { companyId, role: "user", content: userMessage },
   });
 
-  const history = await prisma.chatMessage.findMany({
-    where: { companyId },
-    orderBy: { createdAt: "asc" },
-    take: HISTORY_LIMIT * 2,
-  });
+  const history = await loadRecentChatHistory(companyId);
 
   // Le dernier tour est marqué pour le prompt caching : chaque nouveau
   // message relit l'historique mis en cache au tour précédent plutôt que de
@@ -55,7 +51,7 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
   const getCurrentStatus = betaZodTool({
     name: "get_current_status",
     description:
-      "Récupère l'état réel actuel : propositions en attente (avec leur contenu) et derniers constats d'audit. À utiliser systématiquement avant de répondre à toute question sur l'état, le contenu ou le nombre de propositions/constats — ne jamais deviner ni se fier à ce qui a été dit dans un tour précédent.",
+      "Récupère l'état réel actuel : plan d'action en cours, suivi des prospects, propositions en attente (avec leur contenu) et derniers constats d'audit. À utiliser systématiquement avant de répondre à toute question sur l'état, le plan, les prospects, le contenu ou le nombre de propositions/constats — ne jamais deviner ni se fier à ce qui a été dit dans un tour précédent.",
     inputSchema: z.object({}),
     run: async () => {
       const [pending, findings] = await Promise.all([
@@ -70,6 +66,7 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
         }),
       ]);
       return JSON.stringify({
+        ...(await getPlanAndFunnelStatus(companyId)),
         refusRecents: await getRejectionContext(companyId),
         propositionsEnAttente: pending.map((p) => ({
           id: p.id,
@@ -154,7 +151,8 @@ ${directionLine(company.direction)}
 Tu es un partenaire business, pas un simple assistant qui répond aux questions : tu comprends le métier et le marché du dirigeant, tu l'aides à fixer un objectif chiffré, tu décides avec lui des priorités, tu délègues aux agents spécialisés, tu t'appuies sur les résultats mesurés (écart vers l'objectif, funnel de prospection) pour ajuster ce qui vient ensuite — pas sur des recommandations génériques déconnectées de ce qui se passe réellement.
 Ton rôle concret : échanger avec le dirigeant, l'aider à prioriser, et déléguer aux agents spécialisés (${PERSONAS.marketing.name} pour l'audit/positionnement/fiche Google, ${PERSONAS.contenu.name} pour les posts et le site web, ${PERSONAS.demarchage.name} pour le démarchage et les pistes de croissance) via les outils delegate_* quand c'est pertinent.
 Règles strictes, non négociables :
-- RÈGLE ABSOLUE : ne dis JAMAIS qu'une action a été faite (proposition créée, audit relancé, fiche vue, contenu consulté) sans avoir réellement appelé l'outil correspondant DANS CE TOUR. Tu n'as aucune mémoire fiable de ce qui a été fait avant ce message — si on te demande l'état actuel, le nombre ou le contenu de propositions/constats, appelle TOUJOURS get_current_status avant de répondre. Ne devine jamais.
+- RÈGLE ABSOLUE : ne dis JAMAIS qu'une action a été faite (proposition créée, audit relancé, fiche vue, contenu consulté) sans avoir réellement appelé l'outil correspondant DANS CE TOUR. Tu n'as aucune mémoire fiable de ce qui a été fait avant ce message — si on te demande l'état actuel, le plan d'action, le suivi des prospects, le nombre ou le contenu de propositions/constats, appelle TOUJOURS get_current_status avant de répondre. Ne devine jamais.
+- Avant de proposer une priorité ou de déléguer, appelle get_current_status pour partir du plan en cours et du suivi des prospects : ne propose pas ce qui est déjà au plan, et appuie-toi sur ce que le dirigeant t'a déjà dit dans cette conversation plutôt que de le lui redemander.
 - Tu ne fais JAMAIS exécuter une action réelle toi-même, même automatiquement : déléguer ne fait que créer des propositions, qui restent soumises à la validation du dirigeant dans le dashboard. Dis-le clairement si tu délègues.
 - Tu ne construis pas de site web toi-même (${PERSONAS.contenu.name} ne fournit qu'un brief de contenu, pas le site), ni ne publies ou modifies quoi que ce soit toi-même sur les plateformes externes — sois honnête sur ce que tu ne sais pas faire plutôt que de promettre.
 - Si on te demande de connecter un compte (Google, Instagram, Facebook) : explique que ça se fait via OAuth sur la page /connexions, et que tu ne dois JAMAIS demander ou recevoir un mot de passe dans cette conversation.
@@ -268,9 +266,11 @@ Règles :
 - Une action = un brief exécutable par l'agent tel quel : précis sur le quoi (ex: "3 posts sur les chantiers terminés avec photos avant/après"), pas vague ("améliorer la com").
 - Si l'entreprise n'a pas de site, l'action "préparer le contenu du site" (contenu) est prioritaire : BienDecider le publie après validation.
 - Base-toi sur l'état réel ci-dessous — ne répète pas une action déjà proposée, au plan ou écartée.
+- Tiens compte de ce que le dirigeant a dit dans le chat (préférences, refus, priorités) : une action contraire à une consigne récente ne doit pas figurer au plan.
 - Priorise ce qui a le plus d'impact pour l'objectif, pas une liste exhaustive.`;
 
   const dynamicSystem = `${await getRejectionContext(companyId)}
+${await getChatInstructionsForPlan(companyId)}
 Propositions déjà en attente de validation : ${pendingProposals.map((p) => `${p.agent}: ${p.title}`).join("; ") || "aucune"}.
 Derniers constats (audit, concurrence) : ${recentFindings.map((f) => f.title).join("; ") || "aucun"}.
 Actions déjà au plan (ne les répète pas) : ${existingPlan.map((i) => i.title).join("; ") || "aucune"}.

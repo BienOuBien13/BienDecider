@@ -45,6 +45,7 @@ Ouvre ensuite la pull request sur GitHub. Le modèle se remplit tout seul : indi
 | `npm run test:delegation` | Règles de risque des actions | Rien |
 | `npm run test:brand` | Pages publiques, de 320 à 1440 px | Serveur local démarré |
 | `npm run test:ux` | Parcours connectés | Serveur local et base locale |
+| `npm run test:engine` | Ce que Paul et les agents lisent et écrivent autour des appels au modèle | Base locale |
 | `npm run test:security` | Cookies falsifiés, verrouillage, isolation entre entreprises | Serveur local et base locale |
 
 La CI lance tout cela à chaque PR sur une base jetable. En local, les tests qui écrivent en base refusent toute base non locale, pour ne jamais toucher celle du prototype.
