@@ -158,3 +158,30 @@ test("Camille gets the diagnosis detail and Jean-Claude the competition findings
   expect(competition).toContain("Délais plus courts");
   expect(competition).not.toContain("Menu illisible");
 });
+
+test("a proposal the owner rejected is not recorded again as is", async ({ company }) => {
+  const { prisma } = await import("../src/lib/prisma");
+  const { rejectedDuplicateNotice, normalizeForComparison, getRejectionContext } = await import("../src/lib/agents/rejection-context");
+  expect(normalizeForComparison("  Réécrire  la page d'accueil ! ")).toBe("reecrire la page d accueil");
+
+  await prisma.agentProposal.createMany({ data: [
+    { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post chantier terminé", content: "Avant / après de la salle de bain.", status: "rejetee", rejectionReason: "Pas de photos de chantier", decidedAt: new Date() },
+    { companyId: company.id, agent: "demarchage", kind: "prospect", title: "Association des Commerçants", content: "Cible locale", status: "rejetee", decidedAt: new Date() },
+    { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post conseil entretien", content: "Trois gestes simples.", status: "en_attente" },
+  ] });
+
+  const sameTitle = await rejectedDuplicateNotice(company.id, { kind: "social_post", title: "post  CHANTIER terminé.", content: "Texte entièrement réécrit." });
+  expect(sameTitle).toContain("déjà refusé");
+  expect(sameTitle).toContain("Pas de photos de chantier");
+  const sameContent = await rejectedDuplicateNotice(company.id, { kind: "social_post", title: "Autre titre", content: "avant/après de la salle de bain" });
+  expect(sameContent).toContain("Post chantier terminé");
+  expect(await rejectedDuplicateNotice(company.id, { kind: "prospect", title: "Association des commerçants", content: "Nouvel argumentaire" })).toContain("déjà refusé");
+
+  // Autre type, proposition seulement en attente, ou contenu réellement différent : rien ne bloque.
+  expect(await rejectedDuplicateNotice(company.id, { kind: "site_web_content", title: "Post chantier terminé", content: "Brief de site" })).toBeNull();
+  expect(await rejectedDuplicateNotice(company.id, { kind: "social_post", title: "Post conseil entretien", content: "Trois gestes simples." })).toBeNull();
+  expect(await rejectedDuplicateNotice(company.id, { kind: "social_post", title: "Post portrait de l'équipe", content: "Qui sommes-nous." })).toBeNull();
+
+  // Les raisons de refus sont bien dans le contexte transmis aux agents et au plan.
+  expect(await getRejectionContext(company.id)).toContain("Pas de photos de chantier");
+});
