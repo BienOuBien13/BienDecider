@@ -2,7 +2,7 @@
 
 Nom public : **BienDecider**. Domaine cible : **https://www.biendecider.com**. Contact public : **contact@biendecider.com** (redirection OVH vers le Gmail du propriétaire à activer et tester).
 
-Le dépôt GitHub est `groupebienoubien/BienDecider` (auparavant `RemiJolivalt/pepito`, puis l'organisation `BienOuBien13` ; les anciens liens redirigent). Le projet Vercel `pepito`, le nom du package et les cookies techniques restent inchangés. Pas de migration de données ; les anciens contenus et conversations ne sont pas réécrits. Le changement de domaine nécessite une nouvelle connexion (cookies limités à leur hôte).
+Le dépôt GitHub est `groupebienoubien/BienDecider` (auparavant `RemiJolivalt/pepito`, puis l'organisation `BienOuBien13` ; les anciens liens redirigent). Le projet Vercel est `bien-decider` (il remplace l'ancien projet `pepito`). Le nom du package et les cookies techniques restent inchangés. Pas de migration de données ; les anciens contenus et conversations ne sont pas réécrits. Le changement de domaine nécessite une nouvelle connexion (cookies limités à leur hôte).
 
 Configuration du domaine, de la messagerie et recette : [docs/domain-email-setup.md](docs/domain-email-setup.md).
 

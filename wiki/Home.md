@@ -36,7 +36,7 @@ Ce wiki sert à s'y retrouver sans demander à personne. Il est **généré depu
 | Changements en cours de relecture | [Pull requests](https://github.com/groupebienoubien/BienDecider/pulls) |
 | Résultat des contrôles automatiques | [Actions](https://github.com/groupebienoubien/BienDecider/actions) |
 | Alertes de sécurité et de dépendances | [Security](https://github.com/groupebienoubien/BienDecider/security) |
-| Mise en ligne, logs, variables, rollback | Projet Vercel `pepito` |
+| Mise en ligne, logs, variables, rollback | Projet Vercel `bien-decider` |
 | Données | Base PostgreSQL du prototype, accessible depuis le projet Vercel |
 
 ## Corriger une page

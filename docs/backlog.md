@@ -17,7 +17,7 @@ Décision CEO actée : garder l'esprit ("équipe virtuelle IA qui agit, pas qui 
 
 ## Décision du 2026-10-09 : BienDecider
 
-Le nom public devient **BienDecider**, domaine cible **https://www.biendecider.com** (HTTPS, pas HTTP). Le dépôt GitHub et le projet Vercel restent `pepito`. Les mentions Pepito/Pépito ci-dessous appartiennent à l'historique du produit.
+Le nom public devient **BienDecider**, domaine cible **https://www.biendecider.com** (HTTPS, pas HTTP). Depuis le 2026-10-11, le dépôt GitHub est `groupebienoubien/BienDecider` et le projet Vercel `bien-decider`. Les mentions Pepito/Pépito ci-dessous appartiennent à l'historique du produit.
 
 - [x] Nom remplacé dans la landing, la connexion, la navigation, les pages métier et les documents légaux.
 - [x] Métadonnées de marque et de partage configurées, langue française, base des URL publiques sur `https://www.biendecider.com`.

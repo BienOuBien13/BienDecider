@@ -51,7 +51,7 @@ Le branding OAuth, la propriété du domaine et les documents publics peuvent ê
    GOOGLE_OAUTH_CLIENT_ID="..."
    GOOGLE_OAUTH_CLIENT_SECRET="..."
    ```
-6. En production, ajouter `GOOGLE_OAUTH_CLIENT_ID` et `GOOGLE_OAUTH_CLIENT_SECRET` dans **Vercel > pepito > Settings > Environment Variables > Production**, puis redéployer. Ne jamais les envoyer dans un chat, les commiter ou les afficher dans des logs. En local, utiliser `.env` (ignoré par Git).
+6. En production, ajouter `GOOGLE_OAUTH_CLIENT_ID` et `GOOGLE_OAUTH_CLIENT_SECRET` dans **Vercel > bien-decider > Settings > Environment Variables > Production**, puis redéployer. Ne jamais les envoyer dans un chat, les commiter ou les afficher dans des logs. En local, utiliser `.env` (ignoré par Git).
 7. Tester `/connexions` avec un compte test autorisé. Le code actuel échange le code OAuth et enregistre un jeton ; il **ne liste pas encore les fiches, ne sélectionne pas d'établissement et ne publie pas**. Ne pas considérer cette seule étape comme une connexion métier validée.
 
 En mode OAuth **Testing**, les autorisations avec des scopes comme `business.manage` et les refresh tokens sont limités à **7 jours** : prévoir une réautorisation pendant le pilote. Le renouvellement du jeton d'accès ne supprime pas cette limite. [Durée des autorisations Google](https://support.google.com/cloud/answer/15549945).
@@ -68,7 +68,7 @@ Le CEO a confirmé l'usage **envoyer des emails depuis Gmail**, pas la connexion
 2. Dans le projet Cloud existant, activer **Gmail API** (indépendant de Business Profile), configurer l'audience External et ajouter le compte Gmail aux utilisateurs test si l'application est en Testing.
 3. Ajouter le scope **`https://www.googleapis.com/auth/gmail.send`** au consentement. Les scopes standard **`openid` et `email`** identifient le compte expéditeur (signature du jeton d'identité vérifiée côté serveur). Aucun scope de lecture, de suppression de messages ni `business.manage` n'est demandé par ce flux. Gmail send est un scope sensible : la vérification OAuth de production reste nécessaire selon les exigences Google.
 4. Conserver l'URI autorisée exacte **`https://www.biendecider.com/api/oauth/gmail/callback`**. Ajouter séparément un callback localhost si souhaité ; lancer et terminer OAuth sur le même hôte afin de conserver les cookies de session et de state.
-5. Dans **Vercel > pepito > Settings > Environment Variables > Production**, saisir directement :
+5. Dans **Vercel > bien-decider > Settings > Environment Variables > Production**, saisir directement :
 
    ```text
    GMAIL_OAUTH_CLIENT_ID=<identifiant du client web Google>

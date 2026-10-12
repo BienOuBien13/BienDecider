@@ -69,7 +69,7 @@ Commite le schéma et le dossier de migration dans la même PR. La procédure co
 
 | Symptôme | Quoi faire |
 |---|---|
-| Le site est cassé après une fusion | Vercel > projet `pepito` > Deployments > dernier déploiement sain > **Rollback**. Ensuite, PR de correction ou de revert. |
+| Le site est cassé après une fusion | Vercel > projet `bien-decider` > Deployments > dernier déploiement sain > **Rollback**. Ensuite, PR de correction ou de revert. |
 | Une Issue « Test de fumee en echec » s'est ouverte | Ouvre https://www.biendecider.com/api/health : la réponse doit contenir `"status":"ok"`. Sinon, rollback. |
 | Le déploiement a échoué | Le site reste sur la version précédente. Lis les logs du build dans Vercel. |
 | Une fusion n'a rien mis en ligne | Vérifie dans Vercel > Settings > Git que le dépôt connecté est bien `groupebienoubien/BienDecider`. |

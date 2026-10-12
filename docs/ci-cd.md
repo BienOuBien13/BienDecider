@@ -2,7 +2,7 @@
 
 ## En une minute
 
-**Une seule version partagée** : https://www.biendecider.com, hébergée par le projet Vercel `pepito`, avec sa base PostgreSQL actuelle. Vercel appelle cet environnement **Production**, même si le produit reste un prototype. Pas de staging, pas de branche `develop`. La CI teste sur une base jetable, recréée à chaque exécution.
+**Une seule version partagée** : https://www.biendecider.com, hébergée par le projet Vercel `bien-decider`, avec sa base PostgreSQL actuelle. Vercel appelle cet environnement **Production**, même si le produit reste un prototype. Pas de staging, pas de branche `develop`. La CI teste sur une base jetable, recréée à chaque exécution.
 
 **Le parcours de chaque changement :**
 
@@ -61,7 +61,7 @@ Si les protections ne sont pas disponibles avec le forfait/visibilité du dépô
 
 ### Vercel
 
-1. Conserver un seul projet `pepito`, connecté au dépôt, avec **Production Branch = main**. Selon l'interface, ce réglage se trouve dans **Settings > Environments > Production** ou dans la configuration Git.
+1. Conserver un seul projet `bien-decider`, connecté au dépôt, avec **Production Branch = main**. Selon l'interface, ce réglage se trouve dans **Settings > Environments > Production** ou dans la configuration Git.
 2. Utiliser Node.js **24.x** comme dans la CI. La commande de build est fixée par `vercel.json` (`npm run vercel-build`) ; aucun appel à `prisma db push` dans les commandes Vercel.
 3. Conserver le domaine et les variables actuelles dans **Production**. Aucun token Vercel ni credential PostgreSQL/Google/Anthropic n'est nécessaire dans GitHub Actions.
 4. Vérifier que les commits des deux développeurs sont autorisés par Vercel : leur email Git doit être associé à leur compte GitHub. Selon le plan Vercel, un accès à l'équipe ou un plan compatible peut être requis pour le second auteur ; un accès GitHub seul ne le garantit pas.
