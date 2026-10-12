@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type Anthropic from "@anthropic-ai/sdk";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { getSessionCompany } from "@/lib/session";
+import { recordUsage } from "@/lib/usage";
 
 const profileSchema = z.object({
   name: z.string().max(160),
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
         content: `À partir de cette phrase, retourne uniquement les informations explicitement présentes. Si un champ n'est pas indiqué, retourne une chaîne vide. N'invente jamais un nom commercial, un métier, une zone ni un objectif.\n\nPhrase : ${sentence.data.sentence}`,
       }],
     });
+    await recordUsage({ companyId: company.id, agent: "onboarding", model: AGENT_MODEL, usage: response.usage });
 
     const extracted = response.content.find((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
     const parsed = profileSchema.safeParse(extracted?.input);

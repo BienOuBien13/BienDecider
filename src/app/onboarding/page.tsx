@@ -63,6 +63,7 @@ export default function OnboardingPage() {
     { key: "name", label: "nom commercial", value: name },
     { key: "trade", label: "métier", value: trade },
     { key: "servingArea", label: "zone de chalandise", value: servingArea },
+    { key: "objective", label: "objectif", value: objective },
   ];
   const nextMissingField = profileInterpreted
     ? missingProfileFields.find((field) => !field.value.trim())
@@ -100,6 +101,7 @@ export default function OnboardingPage() {
     if (nextMissingField.key === "name") setName(value);
     if (nextMissingField.key === "trade") setTrade(value);
     if (nextMissingField.key === "servingArea") setServingArea(value);
+    if (nextMissingField.key === "objective") setObjective(value);
     setMissingAnswer("");
   }
 

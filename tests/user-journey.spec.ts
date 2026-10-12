@@ -412,7 +412,7 @@ test("natural-language onboarding previews extracted fields and asks for missing
   try {
     await prisma.company.update({ where: { id: company.id }, data: { name: "", trade: "", servingArea: "", objective: null } });
     await page.route("**/api/onboarding/interpret", (route) => route.fulfill({ json: { profile: {
-      name: "Atelier Exemple", trade: "Plomberie", servingArea: "", objective: "Trouver cinq nouveaux clients par mois",
+      name: "Atelier Exemple", trade: "Plomberie", servingArea: "", objective: "",
     } } }));
 
     await page.goto(`${baseURL}/onboarding`);
@@ -426,6 +426,12 @@ test("natural-language onboarding previews extracted fields and asks for missing
     expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).name).toBe("");
 
     await sentencePanel.locator("input").fill("Lille et alentours");
+    await sentencePanel.getByRole("button", { name: "Continuer", exact: true }).click();
+    await expect(sentencePanel.getByText("Information manquante : objectif")).toBeVisible();
+    await expect(page.getByPlaceholder("ex: 10 nouveaux clients par mois")).toHaveValue("");
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).servingArea).toBe("");
+
+    await sentencePanel.locator("input").fill("Trouver cinq nouveaux clients par mois");
     await sentencePanel.getByRole("button", { name: "Continuer", exact: true }).click();
     await expect(sentencePanel.getByText("Voici ce que j'ai compris. Vérifiez et corrigez les champs avant d'enregistrer.")).toBeVisible();
     expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).name).toBe("");
