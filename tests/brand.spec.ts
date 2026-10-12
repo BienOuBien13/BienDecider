@@ -1,6 +1,40 @@
 import { test, expect } from "@playwright/test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import Loading from "../src/app/loading";
+import ErrorPage from "../src/app/error";
 
 const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
+
+test("loading and error states are French and do not expose technical details", () => {
+  const loading = renderToStaticMarkup(createElement(Loading));
+  expect(loading).toContain('role="status"');
+  expect(loading).toContain("Chargement en cours");
+  expect(loading).toContain("Retour à l&#x27;accueil");
+  const props = { error: Object.assign(new Error("private-database-credentials"), { digest: "private-digest" }), retry: () => {} };
+  for (const component of [ErrorPage]) {
+    const html = renderToStaticMarkup(createElement(component, props));
+    expect(html).toContain("Réessayer");
+    expect(html).toContain('href="/"');
+    expect(html).not.toContain("private-database-credentials");
+    expect(html).not.toContain("private-digest");
+  }
+});
+
+test("unknown pages offer a French return route on desktop and mobile", async ({ page }, testInfo) => {
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const response = await page.goto(`${baseURL}/page-inexistante-test-96`);
+    expect(response?.status()).toBe(404);
+    await expect(page.getByRole("heading", { name: "Page introuvable", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Retour à l'accueil", exact: true })).toHaveAttribute("href", "/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`not-found-${width}.png`), fullPage: true });
+  }
+  await page.getByRole("link", { name: "Retour à l'accueil", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "BienDecider", exact: true })).toBeVisible();
+});
 
 test("BienDecider public identity, metadata, contact and responsive pages", async ({ page }, testInfo) => {
   await page.goto(baseURL);
