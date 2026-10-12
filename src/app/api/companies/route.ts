@@ -50,23 +50,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `${key} doit être un entier positif` }, { status: 400 });
     }
   }
+  const optionalTextFields = { website, socialHandles, objective, description, phone, certifications, openingHours };
+  for (const [key, value] of Object.entries(optionalTextFields)) {
+    if (value != null && typeof value !== "string") {
+      return NextResponse.json({ error: `${key} doit être du texte` }, { status: 400 });
+    }
+  }
   const parsedTargetDate = targetDate ? new Date(targetDate) : null;
   if (parsedTargetDate && Number.isNaN(parsedTargetDate.getTime())) {
     return NextResponse.json({ error: "targetDate invalide" }, { status: 400 });
   }
   const toInt = (v: unknown) => (v == null || v === "" ? null : Number(v));
+  const clearableText = (value: unknown): string | null | undefined => {
+    if (value === undefined || value === null) return value;
+    return typeof value === "string" ? value.trim() || null : null;
+  };
 
   const data = {
     name,
     trade,
     servingArea,
-    website,
-    socialHandles,
-    objective,
-    description,
-    phone,
-    certifications,
-    openingHours,
+    website: clearableText(website),
+    socialHandles: clearableText(socialHandles),
+    objective: clearableText(objective),
+    description: clearableText(description),
+    phone: clearableText(phone),
+    certifications: clearableText(certifications),
+    openingHours: clearableText(openingHours),
     monthlyRevenue: toInt(monthlyRevenue),
     revenueTarget: toInt(revenueTarget),
     targetDate: parsedTargetDate,
