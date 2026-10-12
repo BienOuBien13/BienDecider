@@ -99,7 +99,7 @@ export function JourneyProgress({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
           <p className="text-sm text-slate-700">Prochaine étape : <span className="font-medium">{currentStep.label}</span></p>
           {currentIndex === 0 ? (
-            <Link href="/onboarding" className="text-sm font-medium text-indigo-700 underline underline-offset-4">Compléter mon objectif</Link>
+            <Link href="/entreprise" className="text-sm font-medium text-indigo-700 underline underline-offset-4">Compléter mon objectif</Link>
           ) : currentIndex === 1 ? (
             <Link href="/diagnostic" className="text-sm font-medium text-indigo-700 underline underline-offset-4">Lancer le diagnostic</Link>
           ) : currentIndex === 2 && !planComplete ? (

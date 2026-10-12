@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
+import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 
 export function EquipeClient() {
+  const { requestProfile, profileDialog, checking } = useAgentProfileCompletion();
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -40,6 +42,7 @@ export function EquipeClient() {
       </header>
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {done && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Demande traitée. <Link href="/dashboard?view=validation" className="font-medium underline">Examiner les productions</Link></p>}
+      {profileDialog}
       <div className="mt-6 divide-y divide-slate-200 border-t border-slate-200">
         {(["co_ceo", "marketing", "contenu", "demarchage"] as AgentKey[]).map((key) => {
           const persona = PERSONAS[key];
@@ -60,12 +63,12 @@ export function EquipeClient() {
               ) : (
                 <details className="mt-4">
                   <summary className="cursor-pointer text-sm font-medium text-indigo-600">Demande ponctuelle</summary>
-                  <form onSubmit={(event) => { event.preventDefault(); void run(key); }} className="mt-3 flex flex-wrap items-end gap-3">
+                  <form onSubmit={(event) => { event.preventDefault(); void requestProfile(key, () => run(key)); }} className="mt-3 flex flex-wrap items-end gap-3">
                     <label className="min-w-0 flex-1 basis-60 text-xs font-medium text-slate-600">
                       {key === "contenu" ? "Actualité à communiquer (facultatif)" : "Prospects visés (facultatif)"}
                       <input value={key === "contenu" ? newsContext : prospectDescription} onChange={(event) => key === "contenu" ? setNewsContext(event.target.value) : setProspectDescription(event.target.value)} className="mt-1 block w-full rounded-lg border px-3 py-2 text-sm" />
                     </label>
-                    <button disabled={running !== null} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">{running === key ? "En préparation…" : "Confier la demande"}</button>
+                    <button disabled={running !== null || checking} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">{running === key ? "En préparation…" : "Confier la demande"}</button>
                   </form>
                 </details>
               )}

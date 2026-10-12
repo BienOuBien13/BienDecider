@@ -33,7 +33,7 @@ export default async function RapportPage() {
         <section className="mt-6 border-y border-slate-200 py-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-medium">Objectif de chiffre d&apos;affaires</h2>
-            <Link href="/onboarding" className="text-xs text-indigo-600 underline">Actualiser ma situation</Link>
+            <Link href="/entreprise" className="text-xs text-indigo-600 underline">Actualiser ma situation</Link>
           </div>
           {target ? (
             <dl className="mt-4 grid grid-cols-2 gap-5 sm:grid-cols-4">
@@ -42,7 +42,7 @@ export default async function RapportPage() {
               <div><dt className="text-xs text-slate-500">Écart à combler</dt><dd className="mt-1 text-xl font-semibold text-amber-700">{formatEuros(Math.max(0, target.gap))}</dd></div>
               <div><dt className="text-xs text-slate-500">Clients supplémentaires / mois</dt><dd className="mt-1 text-xl font-semibold">{target.extraClientsPerMonth ?? "Non renseigné"}</dd></div>
             </dl>
-          ) : <Link href="/onboarding" className="mt-4 inline-block text-sm text-indigo-600 underline">Renseigner mon objectif chiffré</Link>}
+          ) : <Link href="/entreprise" className="mt-4 inline-block text-sm text-indigo-600 underline">Renseigner mon objectif chiffré</Link>}
         </section>
         <section className="py-6">
           <div className="flex flex-wrap items-center justify-between gap-3">

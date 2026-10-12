@@ -2,6 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionEmail } from "@/lib/session";
 import { omitPasswordHash } from "@/lib/safe-company";
+import { z } from "zod";
+
+const profileDetailsSchema = z.object({
+  objective: z.string().trim().max(500).optional(),
+  website: z.string().trim().max(500).optional(),
+  socialHandles: z.string().trim().max(500).optional(),
+  description: z.string().trim().max(2000).optional(),
+  phone: z.string().trim().max(100).optional(),
+  certifications: z.string().trim().max(500).optional(),
+  openingHours: z.string().trim().max(500).optional(),
+}).strict();
+
+export async function PATCH(request: NextRequest) {
+  const ownerEmail = await getSessionEmail();
+  if (!ownerEmail) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
+  const company = await prisma.company.findUnique({ where: { ownerEmail } });
+  if (!company) return NextResponse.json({ error: "Entreprise introuvable" }, { status: 404 });
+  const parsed = profileDetailsSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Compléments de profil invalides" }, { status: 400 });
+  const data = Object.fromEntries(Object.entries(parsed.data).map(([key, value]) => [key, value || null]));
+  const updated = await prisma.company.update({ where: { id: company.id }, data });
+  return NextResponse.json(omitPasswordHash(updated));
+}
 
 export async function GET() {
   const ownerEmail = await getSessionEmail();
