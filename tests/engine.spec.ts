@@ -88,3 +88,39 @@ test("the plan receives what the owner said in the chat, and only that", async (
     await prisma.company.delete({ where: { id: other.id } });
   }
 });
+
+test("an agent that produces nothing raises a displayable error, technical errors stay hidden", async () => {
+  const { AgentNoResultError, agentFailureMessage, ensureAgentProduced } = await import("../src/lib/agents/agent-errors");
+  expect(() => ensureAgentProduced("Martine", 1, { stopReason: "end_turn", usage: {} })).not.toThrow();
+  let failure: unknown;
+  try { ensureAgentProduced("Martine", 0, { stopReason: "max_tokens", usage: {} }); } catch (error) { failure = error; }
+  expect(failure).toBeInstanceOf(AgentNoResultError);
+  expect(agentFailureMessage(failure, "Martine")).toBe("Martine n'a pas pu produire de résultat exploitable cette fois-ci. Réessayez.");
+  const technical = agentFailureMessage(new Error("401 invalid x-api-key sk-ant-secret"), "Camille");
+  expect(technical).toBe("Camille est indisponible pour le moment. Réessayez dans quelques minutes.");
+  expect(technical).not.toContain("sk-ant");
+});
+
+test("a failed launch shows an error, keeps the action to launch and creates no placeholder finding", async ({ company, request }) => {
+  test.skip(Boolean(process.env.ANTHROPIC_API_KEY), "Runs only without a model key, so that agent calls fail instead of reaching the provider.");
+  if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for engine tests.");
+  const { prisma } = await import("../src/lib/prisma");
+  const { createHmac } = await import("node:crypto");
+  const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
+  const signature = createHmac("sha256", process.env.SESSION_SECRET).update(company.ownerEmail).digest("hex");
+  const headers = { Cookie: `pepito_session=${Buffer.from(company.ownerEmail).toString("base64url")}.${signature}`, Origin: baseURL };
+
+  for (const agent of ["marketing", "contenu", "demarchage"]) {
+    const item = await prisma.actionPlanItem.create({ data: { companyId: company.id, agent, title: `Action ${agent}`, rationale: "Test d'échec", timing: "Aujourd'hui" } });
+    const response = await request.post(`${baseURL}/api/action-plan/${item.id}/launch`, { headers, data: {} });
+    expect(response.status(), agent).toBe(500);
+    const { error } = await response.json();
+    expect(error, agent).toMatch(/^(Martine|Camille|Jean-Claude) (est indisponible pour le moment|n'a pas pu produire de résultat exploitable)/);
+    expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status, agent).toBe("propose");
+  }
+  const direct = await request.post(`${baseURL}/api/agents/marketing/run`, { headers, data: {} });
+  expect(direct.status()).toBe(500);
+  expect((await direct.json()).error).toMatch(/^Martine /);
+  expect(await prisma.auditFinding.count({ where: { companyId: company.id } })).toBe(0);
+  expect(await prisma.agentProposal.count({ where: { companyId: company.id } })).toBe(0);
+});

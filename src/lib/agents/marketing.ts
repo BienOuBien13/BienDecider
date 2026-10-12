@@ -3,6 +3,7 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import {
   PERSONAS,
@@ -184,23 +185,11 @@ Règles strictes :
     ],
   }));
 
-  if (createdFindingIds.length === 0 && createdProposalIds.length === 0) {
-    console.warn(
-      `Martine (marketing) n'a rien produit — stop_reason: ${finalMessage.stop_reason}, usage total:`,
-      usage,
-    );
-    const fallback = await prisma.auditFinding.create({
-      data: {
-        companyId: company.id,
-        category: "site_web",
-        title: "Analyse incomplète",
-        content: "L'agent n'a pas pu produire de constat exploitable cette fois-ci. Relancez-le depuis le dashboard.",
-      },
-    });
-    createdFindingIds.push(fallback.id);
-  }
-
   await recordUsage({ companyId: company.id, agent: AGENT_NAME, model: AGENT_MODEL, usage });
+
+  // Plus de constat "Analyse incomplète" créé à la place d'une erreur : il
+  // faisait passer un échec pour un diagnostic, et l'action du plan pour traitée.
+  ensureAgentProduced(PERSONA.name, createdFindingIds.length + createdProposalIds.length, { stopReason: finalMessage.stop_reason, usage });
 
   const [findings, proposals] = await Promise.all([
     prisma.auditFinding.findMany({ where: { id: { in: createdFindingIds } } }),

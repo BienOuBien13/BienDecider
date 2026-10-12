@@ -4,6 +4,8 @@ import { runMarketingAgent } from "@/lib/agents/marketing";
 import { runContenuAgent } from "@/lib/agents/contenu";
 import { runDemarchageAgent } from "@/lib/agents/demarchage";
 import { getSessionCompany } from "@/lib/session";
+import { agentFailureMessage } from "@/lib/agents/agent-errors";
+import { PERSONAS } from "@/lib/agents/personas";
 
 /**
  * Lance l'agent correspondant à une action du plan de Paul, EN LUI PASSANT
@@ -73,7 +75,8 @@ export async function POST(
     return NextResponse.json({ item: updated, producedCount });
   } catch (error) {
     console.error("Erreur lancement action du plan:", error);
-    const message = error instanceof Error ? error.message : "Échec du lancement de l'action";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Le statut n'est pas modifié : l'action reste "à lancer" et peut être relancée telle quelle.
+    const agentName = PERSONAS[item.agent as "marketing" | "contenu" | "demarchage"]?.name ?? "L'agent";
+    return NextResponse.json({ error: agentFailureMessage(error, agentName) }, { status: 500 });
   }
 }

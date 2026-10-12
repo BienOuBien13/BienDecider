@@ -4,6 +4,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { agentFailureMessage } from "@/lib/agents/agent-errors";
 import { PERSONAS, objectiveLine, directionLine, companyProfileLines } from "@/lib/agents/personas";
 import { runMarketingAgent } from "@/lib/agents/marketing";
 import { runContenuAgent } from "@/lib/agents/contenu";
@@ -89,8 +90,13 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
       "Lance Martine (Marketing Officer) : audit de présence en ligne, positionnement concurrentiel, et pilotage de la fiche Google (infos, avis). Ne produit pas de contenu créatif.",
     inputSchema: z.object({}),
     run: async () => {
-      const { findings, proposals } = await runMarketingAgent(companyId);
-      return `${findings.length} constat(s) et ${proposals.length} proposition(s) créé(s) par ${PERSONAS.marketing.name}, en attente de validation dans le dashboard.`;
+      try {
+        const { findings, proposals } = await runMarketingAgent(companyId);
+        return `${findings.length} constat(s) et ${proposals.length} proposition(s) créé(s) par ${PERSONAS.marketing.name}, en attente de validation dans le dashboard.`;
+      } catch (error) {
+        console.error("Erreur délégation marketing:", error);
+        return `ÉCHEC, rien n'a été créé : ${agentFailureMessage(error, PERSONAS.marketing.name)}`;
+      }
     },
   });
 
@@ -109,7 +115,8 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
         const proposals = await runContenuAgent(companyId, input.newsContext);
         return `${proposals.length} proposition(s) créée(s) par ${PERSONAS.contenu.name}, en attente de validation dans le dashboard.`;
       } catch (error) {
-        return error instanceof Error ? error.message : `${PERSONAS.contenu.name} a rencontré un problème. Réessaie plus tard.`;
+        console.error("Erreur délégation contenu:", error);
+        return `ÉCHEC, rien n'a été créé : ${agentFailureMessage(error, PERSONAS.contenu.name)}`;
       }
     },
   });
@@ -129,7 +136,8 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
         const proposals = await runDemarchageAgent(companyId, input.prospectDescription);
         return `${proposals.length} proposition(s) créée(s) par ${PERSONAS.demarchage.name}, en attente de validation dans le dashboard.`;
       } catch (error) {
-        return error instanceof Error ? error.message : `${PERSONAS.demarchage.name} a rencontré un problème. Réessaie plus tard.`;
+        console.error("Erreur délégation demarchage:", error);
+        return `ÉCHEC, rien n'a été créé : ${agentFailureMessage(error, PERSONAS.demarchage.name)}`;
       }
     },
   });
@@ -153,6 +161,7 @@ Ton rôle concret : échanger avec le dirigeant, l'aider à prioriser, et délé
 Règles strictes, non négociables :
 - RÈGLE ABSOLUE : ne dis JAMAIS qu'une action a été faite (proposition créée, audit relancé, fiche vue, contenu consulté) sans avoir réellement appelé l'outil correspondant DANS CE TOUR. Tu n'as aucune mémoire fiable de ce qui a été fait avant ce message — si on te demande l'état actuel, le plan d'action, le suivi des prospects, le nombre ou le contenu de propositions/constats, appelle TOUJOURS get_current_status avant de répondre. Ne devine jamais.
 - Avant de proposer une priorité ou de déléguer, appelle get_current_status pour partir du plan en cours et du suivi des prospects : ne propose pas ce qui est déjà au plan, et appuie-toi sur ce que le dirigeant t'a déjà dit dans cette conversation plutôt que de le lui redemander.
+- Si un outil delegate_* répond « ÉCHEC », dis clairement au dirigeant que l'agent n'a rien produit et qu'il peut relancer : ne présente jamais un échec comme un travail fait.
 - Tu ne fais JAMAIS exécuter une action réelle toi-même, même automatiquement : déléguer ne fait que créer des propositions, qui restent soumises à la validation du dirigeant dans le dashboard. Dis-le clairement si tu délègues.
 - Tu ne construis pas de site web toi-même (${PERSONAS.contenu.name} ne fournit qu'un brief de contenu, pas le site), ni ne publies ou modifies quoi que ce soit toi-même sur les plateformes externes — sois honnête sur ce que tu ne sais pas faire plutôt que de promettre.
 - Si on te demande de connecter un compte (Google, Instagram, Facebook) : explique que ça se fait via OAuth sur la page /connexions, et que tu ne dois JAMAIS demander ou recevoir un mot de passe dans cette conversation.
