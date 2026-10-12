@@ -354,9 +354,15 @@ test("diagnostic to plan, keyboard dialog and responsive navigation", async ({ p
     await page.screenshot({ path: testInfo.outputPath("plan-mobile.png"), fullPage: true });
     for (const width of [320, 390, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const path of ["/dashboard", "/dashboard?view=validation", "/diagnostic", "/equipe", "/rapport"]) {
+      for (const [path, title] of [
+        ["/dashboard", "Aujourd'hui"],
+        ["/dashboard?view=validation", "Aujourd'hui"],
+        ["/diagnostic", "Diagnostic"],
+        ["/equipe", "Équipe"],
+        ["/rapport", "Résultats"],
+      ]) {
         await page.goto(`${baseURL}${path}`);
-        await expect(page.locator("h1")).toBeVisible();
+        await expect(page.getByRole("heading", { level: 1, name: title, exact: true })).toBeVisible();
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       }
     }
