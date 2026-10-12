@@ -104,11 +104,11 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
     finally { setBusyId(null); }
   }
 
-  async function handleDecision(proposalId: string, status: "validee" | "modifiee" | "rejetee", content?: string): Promise<boolean> {
+  async function handleDecision(proposalId: string, status: "validee" | "modifiee" | "rejetee", content?: string, rejectionReason?: string): Promise<boolean> {
     setBusyId(proposalId);
     setError(null);
     try {
-      await request(`/api/proposals/${proposalId}`, "PATCH", { status, ...(content === undefined ? {} : { content }) });
+      await request(`/api/proposals/${proposalId}`, "PATCH", { status, ...(content === undefined ? {} : { content }), ...(rejectionReason === undefined ? {} : { rejectionReason }) });
       setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
       setNotice(status === "modifiee"

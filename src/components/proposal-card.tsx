@@ -43,7 +43,7 @@ export function ProposalCard({
   riskSettings,
 }: {
   proposal: AgentProposal;
-  onDecision: (id: string, status: "validee" | "modifiee" | "rejetee", content?: string) => Promise<boolean>;
+  onDecision: (id: string, status: "validee" | "modifiee" | "rejetee", content?: string, rejectionReason?: string) => Promise<boolean>;
   onExecute?: (id: string) => void;
   busy?: boolean;
   showAgent?: boolean;
@@ -51,6 +51,8 @@ export function ProposalCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(proposal.content);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
   const persona = PERSONAS[proposal.agent as Exclude<AgentKey, "co_ceo">];
   const risk = assessActionRisk(proposal.kind, {}, riskSettings?.[proposal.kind]);
   let displayContent = proposal.content;
@@ -72,6 +74,14 @@ export function ProposalCard({
   async function saveEditedContent(event: React.FormEvent) {
     event.preventDefault();
     if (await onDecision(proposal.id, "modifiee", editedContent.trim())) setEditing(false);
+  }
+
+  async function rejectProposal(event: React.FormEvent) {
+    event.preventDefault();
+    if (await onDecision(proposal.id, "rejetee", undefined, rejectionReason.trim())) {
+      setRejecting(false);
+      setRejectionReason("");
+    }
   }
 
   return (
@@ -135,7 +145,20 @@ export function ProposalCard({
           <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{displayContent}</p>
         </details>
       )}
-      {proposal.status === "en_attente" && (
+      {proposal.status === "rejetee" && proposal.rejectionReason && (
+        <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600"><span className="font-medium">Raison du rejet : </span>{proposal.rejectionReason}</p>
+      )}
+      {proposal.status === "en_attente" && rejecting && (
+        <form onSubmit={rejectProposal} className="mt-3 space-y-2">
+          <label htmlFor={`rejection-reason-${proposal.id}`} className="text-xs font-medium text-slate-700">Raison du rejet (facultative)</label>
+          <textarea id={`rejection-reason-${proposal.id}`} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength={1000} rows={3} disabled={busy} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={busy} className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm text-white disabled:opacity-50">Confirmer le rejet</button>
+            <button type="button" onClick={() => { setRejecting(false); setRejectionReason(""); }} disabled={busy} className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50">Annuler le rejet</button>
+          </div>
+        </form>
+      )}
+      {proposal.status === "en_attente" && !rejecting && (
         <div className="mt-3 flex gap-2">
           {!editing && (
             <button
@@ -157,7 +180,7 @@ export function ProposalCard({
                 Valider
               </button>
               <button
-                onClick={() => onDecision(proposal.id, "rejetee")}
+                onClick={() => setRejecting(true)}
                 disabled={busy}
                 className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50"
               >
