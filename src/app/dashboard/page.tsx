@@ -18,7 +18,7 @@ export default async function DashboardPage({ searchParams }: {
   const company = await prisma.company.findUnique({ where: { ownerEmail } });
   if (!company || !company.name) redirect("/onboarding");
 
-  const [planItems, chatMessages, proposals, riskSettings] = await Promise.all([
+  const [planItems, chatMessages, proposals, diagnosticCount, riskSettings] = await Promise.all([
     prisma.actionPlanItem.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "asc" },
@@ -32,6 +32,7 @@ export default async function DashboardPage({ searchParams }: {
       where: { companyId: company.id },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.auditFinding.count({ where: { companyId: company.id } }),
     getConfiguredRiskLevels(),
   ]);
 
@@ -42,6 +43,7 @@ export default async function DashboardPage({ searchParams }: {
         initialPlanItems={planItems}
         initialChatMessages={chatMessages}
         initialProposals={proposals}
+        initialDiagnosticCount={diagnosticCount}
         riskSettings={riskSettings}
         initialView={view === "validation" || view === "historique" ? view : "plan"}
       />

@@ -165,6 +165,21 @@ test("OAuth authorization is not advertised as a verified business connection", 
   } finally { await prisma.$disconnect(); }
 });
 
+test("growth journey shows progress, the current step and can be hidden and restored", async ({ page, company }) => {
+  expect(company.name).toBe("Atelier Test Parcours");
+  await page.goto(`${baseURL}/dashboard`);
+  const journey = page.getByRole("region", { name: "Votre parcours" });
+  await expect(journey.getByRole("heading", { name: "Votre parcours" })).toBeVisible();
+  await expect(journey.getByRole("progressbar", { name: "Avancement du parcours" })).toHaveAttribute("aria-valuenow", "1");
+  await expect(journey.getByText("Étape 2 sur 5 · Diagnostic")).toBeVisible();
+  await expect(journey.getByRole("link", { name: "Lancer le diagnostic" })).toHaveAttribute("href", "/diagnostic");
+
+  await journey.getByRole("button", { name: "Masquer le parcours" }).click();
+  await expect(journey.getByText("Parcours 1/5 étapes terminées")).toBeVisible();
+  await journey.getByRole("button", { name: "Afficher le parcours" }).click();
+  await expect(journey.getByRole("heading", { name: "Votre parcours" })).toBeVisible();
+});
+
 test("single validation queue, persistent decisions, publishing and error recovery", async ({ page, company }, testInfo) => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
   try {
