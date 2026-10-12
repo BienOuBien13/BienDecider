@@ -1,6 +1,6 @@
 # BienDecider : domaine OVH, Vercel et contact
 
-Décision du 2026-10-09 : marque BienDecider, URL de référence `https://www.biendecider.com`, contact `contact@biendecider.com`. Le dépôt et le projet Vercel restent `pepito`.
+Décision du 2026-10-09 : marque BienDecider, URL de référence `https://www.biendecider.com`, contact `contact@biendecider.com`. Depuis le 2026-10-11, le dépôt est `groupebienoubien/BienDecider` et le projet Vercel `bien-decider`.
 
 ## Statut
 
