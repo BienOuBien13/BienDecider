@@ -20,8 +20,17 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Connexion impossible");
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const message =
+          data && typeof data.error === "string"
+            ? data.error
+            : "Service de connexion indisponible. Réessayez dans quelques instants.";
+        throw new Error(message);
+      }
+      if (!data || typeof data.hasCompany !== "boolean") {
+        throw new Error("Réponse de connexion invalide. Réessayez dans quelques instants.");
+      }
       router.push(data.hasCompany ? "/dashboard" : "/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connexion impossible, réessayez.");

@@ -47,6 +47,7 @@ Prérequis : Node.js, une clé API Anthropic (https://console.anthropic.com/), u
    # Optionnel — referme la vue /admin à une liste d'emails (sinon ouverte à tout connecté) :
    # ADMIN_EMAILS="vous@exemple.com"
    ```
+   `DATABASE_URL` est le nom recommandé. Pour les intégrations Prisma Postgres, le serveur accepte aussi `DATABASE_PRISMA_DATABASE_URL` puis `DATABASE_POSTGRES_URL`, dans cet ordre de repli. Si plusieurs sont définies, `DATABASE_URL` a priorité. Ne pas réutiliser une URL divulguée ; la renouveler chez le fournisseur.
 2. Installer les dépendances : `npm install` (génère aussi le client Prisma via `postinstall`)
 3. Créer les tables dans la base de développement : `npx prisma migrate deploy` (changement de schéma : `npx prisma migrate dev`, voir [docs/ci-cd.md](docs/ci-cd.md))
 4. Lancer le serveur de dev : `npm run dev`
@@ -64,7 +65,7 @@ Les tests utilisent `DATABASE_URL` et `SESSION_SECRET` du fichier `.env`. Ils cr
 ## Déploiement (Vercel)
 
 1. Sur [vercel.com](https://vercel.com), importer le repo GitHub `groupebienoubien/BienDecider` — aucune clé API Vercel n'est nécessaire, la connexion se fait directement via l'intégration GitHub native (sécurisé, zéro secret à partager).
-2. Onglet **Storage** du projet Vercel → créer une base **Postgres** → Vercel injecte automatiquement `DATABASE_URL` dans les variables d'environnement du projet.
+2. Onglet **Storage** du projet Vercel → créer/relier la base **Postgres**. Le nom canonique attendu est `DATABASE_URL`. Si l'intégration Prisma fournit seulement `DATABASE_PRISMA_DATABASE_URL` ou `DATABASE_POSTGRES_URL`, le serveur les accepte en repli ; préférer `DATABASE_URL` et ne pas stocker plusieurs URLs contradictoires.
 3. Onglet **Settings → Environment Variables** → ajouter `ANTHROPIC_API_KEY` et `SESSION_SECRET` (même valeur qu'en local, sinon les sessions existantes deviennent invalides). Clés OAuth si prêtes. Laisser `ADMIN_EMAILS` non défini tant que l'admin doit rester ouvert à tous.
 4. Premier déploiement : Vercel lance `npm install` (génère le client Prisma) puis `next build` automatiquement.
 5. Schéma en prod : il évolue par les migrations versionnées de `prisma/migrations`, appliquées au déploiement une fois `MIGRATE_ON_DEPLOY=1` défini dans Vercel. L'activation initiale sur la base existante est décrite dans [docs/ci-cd.md](docs/ci-cd.md) ; ne plus utiliser `prisma db push` sur cette base.
