@@ -7,6 +7,7 @@ import type { SafeCompany } from "@/lib/safe-company";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
 import { ProposalCard } from "@/components/proposal-card";
+import { JourneyProgress } from "@/components/journey-progress";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[] };
 type View = "plan" | "validation" | "historique";
@@ -16,11 +17,12 @@ function needsAttention(proposal: AgentProposal) {
     (proposal.kind === "site_web_content" && ["validee", "modifiee"].includes(proposal.status));
 }
 
-export function DashboardClient({ company, initialPlanItems, initialChatMessages, initialProposals, initialView, riskSettings }: {
+export function DashboardClient({ company, initialPlanItems, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings }: {
   company: SafeCompany;
   initialPlanItems: PlanItemWithProposals[];
   initialChatMessages: ChatMessage[];
   initialProposals: AgentProposal[];
+  initialDiagnosticCount: number;
   initialView: View;
   riskSettings: Record<string, string>;
 }) {
@@ -172,6 +174,16 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
         </div>
         <Link href="/rapport" className="text-sm font-medium text-indigo-600 underline underline-offset-4">Voir les résultats</Link>
       </header>
+      <JourneyProgress
+        objectiveComplete={Boolean(company.objective?.trim())}
+        diagnosticComplete={initialDiagnosticCount > 0}
+        planComplete={planItems.length > 0}
+        workStarted={proposals.length > 0 || planItems.some((item) => ["lance", "termine"].includes(item.status))}
+        needsValidation={actionable.length > 0}
+        resultsAvailable={proposals.some((proposal) => proposal.status === "executee")}
+        planLoading={planLoading}
+        onPreparePlan={handleGeneratePlan}
+      />
       <section className="mt-6 border-y border-slate-200 py-5" aria-labelledby="next-step">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prochaine étape</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
@@ -199,7 +211,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
         ))}
       </nav>
       {initialView === "plan" && (
-        <section className="py-5" aria-label="Plan d'action">
+        <section id="plan-actions" className="py-5" aria-label="Plan d'action">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-medium">Priorités de {PERSONAS.co_ceo.name}</h2>
             <button onClick={handleGeneratePlan} disabled={locked} className="text-sm font-medium text-indigo-600 underline underline-offset-4 disabled:opacity-50">{planLoading ? "Préparation…" : "Compléter le plan"}</button>
