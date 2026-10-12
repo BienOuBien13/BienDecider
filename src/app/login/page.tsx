@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -42,9 +43,9 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex max-w-sm flex-col justify-center p-8 font-sans min-h-screen">
       <h1 className="text-2xl font-semibold">BienDecider</h1>
+      <h2 className="mt-4 text-lg font-medium">Connexion</h2>
       <p className="mt-1 text-sm text-gray-500">
-        Première visite ? Entrez l&apos;email et le mot de passe que vous
-        voulez utiliser — votre compte est créé automatiquement.
+        Connectez-vous avec l&apos;email et le mot de passe de votre compte.
       </p>
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
         <input
@@ -71,6 +72,9 @@ export default function LoginPage() {
           {loading ? "Connexion…" : "Continuer"}
         </button>
         {error && <p className="text-sm text-red-600">{error}</p>}
+        <p className="text-sm text-gray-600">
+          Pas encore de compte ? <Link className="underline" href="/signup">Créer un compte</Link>
+        </p>
       </form>
     </main>
   );

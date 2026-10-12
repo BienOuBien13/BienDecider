@@ -51,6 +51,7 @@ const GUARDED_ROUTES: Guarded[] = [
 const PUBLIC_ROUTES: Record<string, string> = {
   "/api/auth/login": "point d'entrée de la connexion",
   "/api/auth/logout": "efface seulement le cookie de l'appelant",
+  "/api/auth/signup": "inscription publique avec création explicite de compte",
   "/api/cron/weekly-review": "protégée par CRON_SECRET, pas par la session",
   "/api/health": "sonde publique sans donnée métier",
 };
@@ -134,13 +135,38 @@ test("missing, unsigned and forged session cookies are refused everywhere", asyn
   expect([401, 500]).toContain(cron.status());
 });
 
+test("login does not create unknown accounts; signup is explicit", async ({ request }) => {
+  const prisma = openDatabase();
+  const email = `security-signup-${randomUUID()}@example.invalid`;
+  const password = "mot-de-passe-valide";
+  try {
+    const missingLogin = await request.post(`${baseURL}/api/auth/login`, { data: { email, password } });
+    expect(missingLogin.status()).toBe(404);
+    expect((await missingLogin.json()).error).toContain("Aucun compte associé à cet email");
+    expect(await prisma.company.count({ where: { ownerEmail: email } })).toBe(0);
+
+    const signup = await request.post(`${baseURL}/api/auth/signup`, { data: { email, password } });
+    expect(signup.status()).toBe(201);
+    expect(signup.headers()["set-cookie"]).toContain("pepito_session=");
+    expect(await signup.json()).toMatchObject({ hasCompany: false });
+    expect(await prisma.company.count({ where: { ownerEmail: email } })).toBe(1);
+
+    const duplicateSignup = await request.post(`${baseURL}/api/auth/signup`, { data: { email, password } });
+    expect(duplicateSignup.status()).toBe(409);
+    expect(await prisma.company.count({ where: { ownerEmail: email } })).toBe(1);
+  } finally {
+    await prisma.company.deleteMany({ where: { ownerEmail: email } });
+    await prisma.$disconnect();
+  }
+});
+
 test("five wrong passwords lock the account, even for the right password", async ({ request }) => {
   const prisma = openDatabase();
   const email = `security-lock-${randomUUID()}@example.invalid`;
   const password = "mot-de-passe-correct";
   const login = (candidate: string) => request.post(`${baseURL}/api/auth/login`, { data: { email, password: candidate } });
   try {
-    expect((await login(password)).status()).toBe(200);
+    expect((await request.post(`${baseURL}/api/auth/signup`, { data: { email, password } })).status()).toBe(201);
     for (let attempt = 1; attempt <= 4; attempt++) {
       const wrong = await login("mauvais-mot-de-passe");
       expect(wrong.status(), `attempt ${attempt}`).toBe(401);

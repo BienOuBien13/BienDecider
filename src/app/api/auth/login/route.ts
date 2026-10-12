@@ -7,21 +7,26 @@ const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
 
 /**
- * Login simple par email + mot de passe (cf. docs/backlog.md — demande CEO).
- * Première connexion d'un email inconnu = création de compte : le mot de
- * passe fourni est enregistré, l'entreprise est créée avec des champs vides
- * (complétés ensuite dans l'onboarding). Un compte créé avant ce champ
- * (passwordHash null) accepte le mot de passe fourni et l'enregistre —
- * migration en douceur, pas de rupture pour les comptes de test existants.
+ * Connexion par email + mot de passe. L'inscription est un flux séparé : une
+ * faute de frappe ne doit jamais créer une entreprise vide.
+ * Un compte antérieur sans passwordHash accepte encore son premier mot de
+ * passe, pour préserver la migration en douceur des comptes existants.
  *
  * Anti-force-brute (cf. docs/backlog.md, point P0) : 5 échecs consécutifs
  * verrouillent le compte 15 minutes. Stocké en base (pas en mémoire) pour
  * rester valable entre plusieurs instances serverless.
  */
 export async function POST(request: NextRequest) {
-  const { email, password } = await request.json();
+  let body: { email?: unknown; password?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
+  }
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  const { password } = body;
 
-  if (!email || typeof email !== "string" || !email.includes("@")) {
+  if (!email || !email.includes("@")) {
     return NextResponse.json({ error: "Email invalide" }, { status: 400 });
   }
   if (!password || typeof password !== "string" || password.length < 6) {
@@ -39,16 +44,13 @@ export async function POST(request: NextRequest) {
   }
 
   if (!company) {
-    company = await prisma.company.create({
-      data: {
-        ownerEmail: email,
-        passwordHash: await hashPassword(password),
-        name: "",
-        trade: "",
-        servingArea: "",
-      },
-    });
-  } else if (!company.passwordHash) {
+    return NextResponse.json(
+      { error: "Aucun compte associé à cet email. Créez un compte pour continuer." },
+      { status: 404 },
+    );
+  }
+
+  if (!company.passwordHash) {
     company = await prisma.company.update({
       where: { id: company.id },
       data: { passwordHash: await hashPassword(password) },
