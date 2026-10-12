@@ -181,6 +181,35 @@ test("growth journey shows progress, the current step and can be hidden and rest
   await expect(journey.getByRole("heading", { name: "Votre parcours" })).toBeVisible();
 });
 
+test("proposal can be edited and saved as the approved version without executing it", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const updatedContent = "Texte corrigé par le dirigeant avant validation.";
+  let proposalId = "";
+  try {
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id,
+      agent: "contenu",
+      kind: "social_post",
+      title: "Publication à corriger",
+      content: "Version initiale à corriger.",
+    } });
+    proposalId = proposal.id;
+
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const card = page.locator("article").filter({ hasText: proposal.title });
+    await card.getByRole("button", { name: "Modifier", exact: true }).click();
+    await card.getByRole("textbox", { name: "Modifier le contenu" }).fill(updatedContent);
+    await card.getByRole("button", { name: "Enregistrer et valider la version", exact: true }).click();
+
+    await expect(card.getByText("Modifiée", { exact: true })).toBeVisible();
+    expect((await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } })).content).toBe(updatedContent);
+    expect(await prisma.executionLog.count({ where: { proposalId: proposal.id } })).toBe(0);
+  } finally {
+    if (proposalId) await prisma.agentProposal.deleteMany({ where: { id: proposalId } });
+    await prisma.$disconnect();
+  }
+});
+
 test("single validation queue, persistent decisions, publishing and error recovery", async ({ page, company }, testInfo) => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
   try {
