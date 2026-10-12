@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { DeleteCompanyButton } from "./delete-company-button";
 import Link from "next/link";
+import { listUncoveredRequests } from "@/lib/agents/capabilities";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,8 @@ export default async function AdminPage() {
     { label: "Ont validé une action", count: companiesWithValidated.length },
     { label: "Ont un site publié", count: companiesWithSite },
   ];
+
+  const uncoveredRequests = isExplicitAdminEmail(ownerEmail) ? await listUncoveredRequests() : null;
 
   return (
     <AppShell>
@@ -196,6 +199,45 @@ export default async function AdminPage() {
             </table>
           </div>
         </section>
+
+        {/* Réservé aux administrateurs explicites : ces demandes citent ce que d'autres entreprises ont écrit. */}
+        {uncoveredRequests && (
+          <section className="mt-8">
+            <h2 className="text-lg font-medium">Demandes hors catalogue ({uncoveredRequests.length})</h2>
+            <p className="mt-1 text-sm text-slate-500">Ce que des dirigeants ont demandé et qu&apos;aucun agent ne couvre, noté par Paul. Les 50 plus récentes.</p>
+            <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Entreprise</th>
+                    <th className="px-3 py-2">Demande</th>
+                    <th className="px-3 py-2">Proposé à la place</th>
+                    <th className="px-3 py-2">Origine</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {uncoveredRequests.map((entry) => (
+                    <tr key={entry.id} className="border-b border-slate-100 align-top">
+                      <td className="px-3 py-2 whitespace-nowrap">{entry.createdAt.toLocaleDateString("fr-FR")}</td>
+                      <td className="px-3 py-2">{entry.company.name || entry.company.trade || "Sans nom"}</td>
+                      <td className="px-3 py-2">{entry.request}</td>
+                      <td className="px-3 py-2">{entry.closestAlternative ?? "Rien"}</td>
+                      <td className="px-3 py-2">{entry.source === "plan" ? "Plan" : "Chat"}</td>
+                    </tr>
+                  ))}
+                  {uncoveredRequests.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-6 text-center text-slate-400">
+                        Aucune demande hors catalogue notée.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         {/* Coût par modèle */}
         <section className="mt-8 mb-8">
