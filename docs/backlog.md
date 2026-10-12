@@ -2,7 +2,7 @@
 
 ## Suivi courant depuis le 2026-10-10
 
-**GitHub Issues est la source de vérité pour les US, responsables, priorités et statuts** : [US ouvertes](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus). Répartition et mise à jour : [github-tracking.md](github-tracking.md).
+**GitHub Issues est la source de vérité pour les US, responsables, priorités et statuts** : [US ouvertes](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus). Répartition et mise à jour : [github-tracking.md](github-tracking.md).
 
 Focus actuel demandé par les fondateurs : **domaine delegation en P1** ; état des 7 P1, dépendances et ordre de prise en charge dans [domaines.md](domaines.md#focus-actuel--délégation-p1). Les Issues restent la source de vérité des labels et affectations.
 

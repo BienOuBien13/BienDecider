@@ -10,7 +10,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
-const repo = process.env.GITHUB_REPOSITORY || "BienOuBien13/BienDecider";
+const repo = process.env.GITHUB_REPOSITORY || "groupebienoubien/BienDecider";
 const repoUrl = `https://github.com/${repo}`;
 
 // Fichier source -> nom de page du wiki. Un guide absent d'ici garde son nom de fichier.

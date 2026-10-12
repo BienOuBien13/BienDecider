@@ -11,7 +11,7 @@ Ce wiki sert à s'y retrouver sans demander à personne. Il est **généré depu
 | Faire une modification et la mettre en ligne | [Aide-mémoire](Aide-memoire.md), puis [CI/CD](../docs/ci-cd.md) pour le détail |
 | Savoir ce qui existe aujourd'hui dans le code : pages, routes, tables, commandes, variables | [État du dépôt](Etat-du-depot.md) |
 | Comprendre comment les agents travaillent ensemble | [Architecture](../docs/architecture.md) et [Agents](../docs/agents-roster.md) |
-| Choisir quoi faire ensuite, ou voir qui fait quoi | [Suivi des US](../docs/github-tracking.md) et les [Issues](https://github.com/BienOuBien13/BienDecider/issues) |
+| Choisir quoi faire ensuite, ou voir qui fait quoi | [Suivi des US](../docs/github-tracking.md) et les [Issues](https://github.com/groupebienoubien/BienDecider/issues) |
 | Voir la trajectoire produit par domaine | [Domaines](../docs/domaines.md) et [Backlog](../docs/backlog.md) |
 | Réagir à un incident en production | [Aide-mémoire, section incident](Aide-memoire.md#un-problème-en-production) |
 | Régler les niveaux de risque des actions | [Risques de délégation](../docs/delegation-risk-admin.md) |
@@ -31,11 +31,11 @@ Ce wiki sert à s'y retrouver sans demander à personne. Il est **généré depu
 
 | Quoi | Où |
 |---|---|
-| Code et guides | [github.com/BienOuBien13/BienDecider](https://github.com/BienOuBien13/BienDecider) |
-| Travail à faire et décisions | [Issues](https://github.com/BienOuBien13/BienDecider/issues) |
-| Changements en cours de relecture | [Pull requests](https://github.com/BienOuBien13/BienDecider/pulls) |
-| Résultat des contrôles automatiques | [Actions](https://github.com/BienOuBien13/BienDecider/actions) |
-| Alertes de sécurité et de dépendances | [Security](https://github.com/BienOuBien13/BienDecider/security) |
+| Code et guides | [github.com/groupebienoubien/BienDecider](https://github.com/groupebienoubien/BienDecider) |
+| Travail à faire et décisions | [Issues](https://github.com/groupebienoubien/BienDecider/issues) |
+| Changements en cours de relecture | [Pull requests](https://github.com/groupebienoubien/BienDecider/pulls) |
+| Résultat des contrôles automatiques | [Actions](https://github.com/groupebienoubien/BienDecider/actions) |
+| Alertes de sécurité et de dépendances | [Security](https://github.com/groupebienoubien/BienDecider/security) |
 | Mise en ligne, logs, variables, rollback | Projet Vercel `pepito` |
 | Données | Base PostgreSQL du prototype, accessible depuis le projet Vercel |
 

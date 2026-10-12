@@ -2,13 +2,13 @@
 
 Nom public : **BienDecider**. Domaine cible : **https://www.biendecider.com**. Contact public : **contact@biendecider.com** (redirection OVH vers le Gmail du propriétaire à activer et tester).
 
-Le dépôt GitHub est `BienOuBien13/BienDecider` (transféré depuis `RemiJolivalt/pepito` le 2026-10-11 ; les anciens liens redirigent). Le projet Vercel `pepito`, le nom du package et les cookies techniques restent inchangés. Pas de migration de données ; les anciens contenus et conversations ne sont pas réécrits. Le changement de domaine nécessite une nouvelle connexion (cookies limités à leur hôte).
+Le dépôt GitHub est `groupebienoubien/BienDecider` (auparavant `RemiJolivalt/pepito`, puis `groupebienoubien/BienDecider` ; les anciens liens redirigent). Le projet Vercel `pepito`, le nom du package et les cookies techniques restent inchangés. Pas de migration de données ; les anciens contenus et conversations ne sont pas réécrits. Le changement de domaine nécessite une nouvelle connexion (cookies limités à leur hôte).
 
 Configuration du domaine, de la messagerie et recette : [docs/domain-email-setup.md](docs/domain-email-setup.md).
 
 Développement à deux, CI et déploiement du prototype : **[docs/ci-cd.md](docs/ci-cd.md)**. PR courte vers `main`, contrôles GitHub obligatoires après configuration des protections, puis déploiement Vercel automatique. Un seul environnement partagé ; pas de previews de branches.
 
-Répartition du travail et statuts des US : **[docs/github-tracking.md](docs/github-tracking.md)** et [GitHub Issues](https://github.com/BienOuBien13/BienDecider/issues). Délégation documentée après 4 secondes sans réponse ou indisponibilité annoncée, hors zones sensibles de `.github/CODEOWNERS` où l'approbation de l'autre développeur est obligatoire, sans contourner la PR ni la CI.
+Répartition du travail et statuts des US : **[docs/github-tracking.md](docs/github-tracking.md)** et [GitHub Issues](https://github.com/groupebienoubien/BienDecider/issues). Délégation documentée après 4 secondes sans réponse ou indisponibilité annoncée, hors zones sensibles de `.github/CODEOWNERS` où l'approbation de l'autre développeur est obligatoire, sans contourner la PR ni la CI.
 
 Réglages admin du risque et migration de base requise : **[docs/delegation-risk-admin.md](docs/delegation-risk-admin.md)**. Page `/admin/risques`, accessible aux seuls emails explicitement listés dans `ADMIN_EMAILS`.
 
@@ -63,7 +63,7 @@ Les tests utilisent `DATABASE_URL` et `SESSION_SECRET` du fichier `.env`. Ils cr
 
 ## Déploiement (Vercel)
 
-1. Sur [vercel.com](https://vercel.com), importer le repo GitHub `BienOuBien13/BienDecider` — aucune clé API Vercel n'est nécessaire, la connexion se fait directement via l'intégration GitHub native (sécurisé, zéro secret à partager).
+1. Sur [vercel.com](https://vercel.com), importer le repo GitHub `groupebienoubien/BienDecider` — aucune clé API Vercel n'est nécessaire, la connexion se fait directement via l'intégration GitHub native (sécurisé, zéro secret à partager).
 2. Onglet **Storage** du projet Vercel → créer une base **Postgres** → Vercel injecte automatiquement `DATABASE_URL` dans les variables d'environnement du projet.
 3. Onglet **Settings → Environment Variables** → ajouter `ANTHROPIC_API_KEY` et `SESSION_SECRET` (même valeur qu'en local, sinon les sessions existantes deviennent invalides). Clés OAuth si prêtes. Laisser `ADMIN_EMAILS` non défini tant que l'admin doit rester ouvert à tous.
 4. Premier déploiement : Vercel lance `npm install` (génère le client Prisma) puis `next build` automatiquement.
@@ -82,7 +82,7 @@ Le panneau admin des niveaux de risque utilise une table Prisma ajoutée après 
 
 ## Documents
 
-Pour s'y retrouver sans chercher : le **[wiki](https://github.com/BienOuBien13/BienDecider/wiki)**, généré depuis ce dépôt à chaque fusion sur `main` (accueil et aide-mémoire dans [wiki/](wiki), état du code calculé par [scripts/build-wiki.cjs](scripts/build-wiki.cjs)). Ne pas le modifier dans GitHub : corriger le fichier source dans une PR.
+Pour s'y retrouver sans chercher : le **[wiki](https://github.com/groupebienoubien/BienDecider/wiki)**, généré depuis ce dépôt à chaque fusion sur `main` (accueil et aide-mémoire dans [wiki/](wiki), état du code calculé par [scripts/build-wiki.cjs](scripts/build-wiki.cjs)). Ne pas le modifier dans GitHub : corriger le fichier source dans une PR.
 
 - **[docs/architecture.md](docs/architecture.md) — logique inter-agents et stack technique à jour (diagrammes)**
 - [docs/spec-contextualisation.md](docs/spec-contextualisation.md) — parcours d'onboarding / contextualisation de l'entreprise

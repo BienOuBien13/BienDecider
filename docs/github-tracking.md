@@ -2,20 +2,20 @@
 
 ## Une source de verite
 
-Le suivi courant est dans [les Issues BienDecider](https://github.com/BienOuBien13/BienDecider/issues), pas dans deux listes de cases a maintenir en parallele. [backlog.md](backlog.md) conserve le contexte, les decisions et l'historique des livraisons. Les anciens elements livres ne sont pas recrees comme des US ouvertes.
+Le suivi courant est dans [les Issues BienDecider](https://github.com/groupebienoubien/BienDecider/issues), pas dans deux listes de cases a maintenir en parallele. [backlog.md](backlog.md) conserve le contexte, les decisions et l'historique des livraisons. Les anciens elements livres ne sont pas recrees comme des US ouvertes.
 
 Chaque US contient le besoin utilisateur, des criteres d'acceptation, les dependances, la verification et le perimetre. Une US = un resultat livrable ; si elle est trop grosse, la decouper avant de la prendre.
 
 ## Vues utiles sans outil supplementaire
 
-- [US ouvertes](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus).
-- [Pretes a prendre](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Aready).
-- [Mon travail](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20assignee%3A%40me).
-- [A relire](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Areview).
-- [Bloquees](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Ablocked).
-- [P0](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Apriority%3Ap0).
-- [Délégation P1](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Adelegation%20label%3Apriority%3Ap1).
-- [Relectures differees, PR ouvertes ou fermees](https://github.com/BienOuBien13/BienDecider/pulls?q=is%3Apr%20label%3Areview-deferred).
+- [US ouvertes](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus).
+- [Pretes a prendre](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Aready).
+- [Mon travail](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20assignee%3A%40me).
+- [A relire](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Areview).
+- [Bloquees](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Astatus%3Ablocked).
+- [P0](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Apriority%3Ap0).
+- [Délégation P1](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Adomaine%3Adelegation%20label%3Apriority%3Ap1).
+- [Relectures differees, PR ouvertes ou fermees](https://github.com/groupebienoubien/BienDecider/pulls?q=is%3Apr%20label%3Areview-deferred).
 
 Pas de GitHub Project obligatoire : les Issues et les filtres suffisent a deux. Un tableau Project pourra etre ajoute plus tard sans dupliquer les US.
 

@@ -24,7 +24,7 @@ Les branches de travail ne sont pas déployées par Vercel : `vercel.json` désa
 | Fusion ou push sur `main` | GitHub Actions | Les mêmes contrôles, pour détecter une régression sur la branche partagée |
 | Fusion ou push sur `main` | Intégration GitHub de Vercel | Installation, migrations si activées, build et publication sur le domaine du prototype |
 | Déploiement Production réussi | GitHub Actions, workflow `Smoke test` | `/api/health` sert le commit déployé et la base répond, puis `test:brand` en lecture seule sur le domaine ; une Issue est ouverte en cas d'échec |
-| Fusion ou push sur `main` | GitHub Actions, workflow `Wiki` | Régénère le [wiki](https://github.com/BienOuBien13/BienDecider/wiki) depuis `wiki/`, `docs/` et le code ; `Checks` vérifie avant fusion que les pages se construisent et que les liens relatifs des guides pointent vers des fichiers existants |
+| Fusion ou push sur `main` | GitHub Actions, workflow `Wiki` | Régénère le [wiki](https://github.com/groupebienoubien/BienDecider/wiki) depuis `wiki/`, `docs/` et le code ; `Checks` vérifie avant fusion que les pages se construisent et que les liens relatifs des guides pointent vers des fichiers existants |
 | Chaque lundi | Dependabot | Une PR groupée de mises à jour npm mineures et correctives, une pour les actions GitHub |
 | Relance manuelle | GitHub > Actions > CI ou Smoke test > Run workflow | Contrôles seulement, aucun déploiement ni changement de base |
 
@@ -43,11 +43,11 @@ Ces réglages de comptes ne sont pas appliqués par les fichiers du dépôt. Un 
 
 ### GitHub
 
-1. Donner aux deux développeurs l'accès au dépôt `BienOuBien13/BienDecider` et vérifier que GitHub Actions est autorisé.
+1. Donner aux deux développeurs l'accès au dépôt `groupebienoubien/BienDecider` et vérifier que GitHub Actions est autorisé.
 2. Importer le ruleset versionné [../.github/rulesets/main.json](../.github/rulesets/main.json) : **Settings > Rules > Rulesets > New ruleset > Import a ruleset**, ou en ligne de commande avec un compte administrateur :
 
    ```bash
-   gh api -X POST repos/BienOuBien13/BienDecider/rulesets --input .github/rulesets/main.json
+   gh api -X POST repos/groupebienoubien/BienDecider/rulesets --input .github/rulesets/main.json
    ```
 
    Il impose sur `main` : pull request obligatoire, contrôle **`Checks`** requis sur une branche à jour, fusion par squash uniquement, force-push et suppression interdits, aucun bypass, y compris pour les administrateurs.

@@ -35,7 +35,7 @@ Ouvre ensuite la pull request sur GitHub. Le modèle se remplit tout seul : indi
 2. Si GitHub demande une approbation, c'est que la PR touche un [fichier à relecture obligatoire](Etat-du-depot.md#fichiers-à-relecture-obligatoire) : l'autre fondateur doit approuver.
 3. Si GitHub dit que la branche n'est pas à jour, clique **Update branch** et attends de nouveau Checks.
 4. Clique **Squash and merge**. La branche est supprimée automatiquement.
-5. La mise en ligne part toute seule. Vérifie dans [Actions](https://github.com/BienOuBien13/BienDecider/actions) que **Smoke test** passe, puis regarde le parcours touché sur le site.
+5. La mise en ligne part toute seule. Vérifie dans [Actions](https://github.com/groupebienoubien/BienDecider/actions) que **Smoke test** passe, puis regarde le parcours touché sur le site.
 
 ## Les tests
 
@@ -72,7 +72,7 @@ Commite le schéma et le dossier de migration dans la même PR. La procédure co
 | Le site est cassé après une fusion | Vercel > projet `pepito` > Deployments > dernier déploiement sain > **Rollback**. Ensuite, PR de correction ou de revert. |
 | Une Issue « Test de fumee en echec » s'est ouverte | Ouvre https://www.biendecider.com/api/health : la réponse doit contenir `"status":"ok"`. Sinon, rollback. |
 | Le déploiement a échoué | Le site reste sur la version précédente. Lis les logs du build dans Vercel. |
-| Une fusion n'a rien mis en ligne | Vérifie dans Vercel > Settings > Git que le dépôt connecté est bien `BienOuBien13/BienDecider`. |
+| Une fusion n'a rien mis en ligne | Vérifie dans Vercel > Settings > Git que le dépôt connecté est bien `groupebienoubien/BienDecider`. |
 | Un secret a fuité | Révoque-le chez le fournisseur d'abord, puis remplace-le dans Vercel. Le retirer du code ne suffit pas. |
 
 Le rollback Vercel ne restaure que le code, jamais les données : pour la base, seule la sauvegarde de l'hébergeur compte.
