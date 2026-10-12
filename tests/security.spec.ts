@@ -136,7 +136,7 @@ test("missing, unsigned and forged session cookies are refused everywhere", asyn
     for (const path of GUARDED_PAGES) {
       await page.goto(`${baseURL}${path}`);
       await expect(page, `${path} (${label})`).toHaveURL(`${baseURL}/login`);
-      await expect(page.getByRole("button", { name: "Se connecter", exact: true }), `${path} (${label})`).toBeVisible();
+      await expect(page.getByRole("button", { name: "Continuer", exact: true }), `${path} (${label})`).toBeVisible();
     }
   }
   const cron = await request.get(`${baseURL}/api/cron/weekly-review`, { headers: { Authorization: "Bearer wrong-secret" } });
