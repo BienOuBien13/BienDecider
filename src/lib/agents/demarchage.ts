@@ -3,6 +3,7 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { getCompetitionContextForProspecting } from "@/lib/agents/findings-context";
 import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import {
@@ -183,6 +184,7 @@ Règles strictes, non négociables :
     system: [
       { type: "text", text: stableSystem, cache_control: { type: "ephemeral" } },
       { type: "text", text: await getRejectionContext(companyId) },
+      { type: "text", text: await getCompetitionContextForProspecting(companyId) },
       ...(options.brief ? [{ type: "text" as const, text: briefLine(options.brief) }] : []),
     ],
     messages: [

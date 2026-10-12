@@ -3,6 +3,7 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { getFindingsContextForContent } from "@/lib/agents/findings-context";
 import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import {
@@ -32,12 +33,6 @@ export async function runContenuAgent(
 ) {
   const company = await prisma.company.findUniqueOrThrow({
     where: { id: companyId },
-  });
-
-  const recentFindings = await prisma.auditFinding.findMany({
-    where: { companyId },
-    orderBy: { createdAt: "desc" },
-    take: 5,
   });
 
   const createdProposalIds: string[] = [];
@@ -99,9 +94,7 @@ Règles strictes :
 
   const dynamicSystem = `${await getRejectionContext(companyId)}
 ${briefLine(options.brief)}
-Derniers constats de ${PERSONAS.marketing.name} (audit/positionnement, à exploiter si pertinent) : ${
-    recentFindings.map((f) => `${f.title}`).join("; ") || "aucun encore"
-  }.`;
+${await getFindingsContextForContent(companyId)}`;
 
   const { finalMessage, usage } = await runToolLoop(anthropic.beta.messages.toolRunner({
     model: AGENT_MODEL,

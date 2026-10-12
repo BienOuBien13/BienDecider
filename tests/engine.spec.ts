@@ -124,3 +124,37 @@ test("a failed launch shows an error, keeps the action to launch and creates no 
   expect(await prisma.auditFinding.count({ where: { companyId: company.id } })).toBe(0);
   expect(await prisma.agentProposal.count({ where: { companyId: company.id } })).toBe(0);
 });
+
+test("Camille gets the diagnosis detail and Jean-Claude the competition findings", async ({ company }) => {
+  const { prisma } = await import("../src/lib/prisma");
+  const { getFindingsContextForContent, getCompetitionContextForProspecting } = await import("../src/lib/agents/findings-context");
+  expect(await getFindingsContextForContent(company.id)).toContain("aucun constat");
+  expect(await getCompetitionContextForProspecting(company.id)).toContain("aucun pour l'instant");
+
+  const start = Date.now() - 60 * 60 * 1000;
+  await prisma.auditFinding.createMany({ data: [
+    { companyId: company.id, category: "site_web", title: "Site peu lisible sur mobile", content: "Résumé site", whatWorks: "Photos soignées", toImprove: "Menu illisible sur téléphone",
+      actionItems: [{ agent: "contenu", title: "Réécrire la page d'accueil", rationale: "Clarifier l'offre" }, { agent: "marketing", title: "Corriger les horaires Google", rationale: "Fiche incohérente" }],
+      createdAt: new Date(start) },
+    { companyId: company.id, category: "concurrence", title: "Deux concurrents mieux notés", content: "Résumé concurrence", whatWorks: "Délais plus courts", toImprove: "Moins d'avis que les voisins", createdAt: new Date(start + 1000) },
+    { companyId: company.id, category: "reseaux_sociaux", title: "Ancien constat sans détail", content: "Résumé ancien", createdAt: new Date(start + 2000) },
+  ] });
+
+  const content = await getFindingsContextForContent(company.id);
+  expect(content).toContain("Menu illisible sur téléphone");
+  expect(content).toContain("Réécrire la page d'accueil");
+  expect(content).toContain("Clarifier l'offre");
+  expect(content).toContain("Ancien constat sans détail");
+  const detail = JSON.parse(content.slice(content.indexOf("[")));
+  const site = detail.find((finding: { titre: string }) => finding.titre === "Site peu lisible sur mobile");
+  expect(site.actionsSuggerees).toEqual([
+    { pourToi: true, action: "Réécrire la page d'accueil", raison: "Clarifier l'offre" },
+    { pourToi: false, action: "Corriger les horaires Google", raison: "Fiche incohérente" },
+  ]);
+
+  const competition = await getCompetitionContextForProspecting(company.id);
+  expect(competition).toContain("Deux concurrents mieux notés");
+  expect(competition).toContain("Moins d'avis que les voisins");
+  expect(competition).toContain("Délais plus courts");
+  expect(competition).not.toContain("Menu illisible");
+});
