@@ -165,7 +165,8 @@ test("OAuth authorization is not advertised as a verified business connection", 
   } finally { await prisma.$disconnect(); }
 });
 
-test("growth journey shows progress, the current step and can be hidden and restored", async ({ page }) => {
+test("growth journey shows progress, the current step and can be hidden and restored", async ({ page, company }) => {
+  expect(company.name).toBe("Atelier Test Parcours");
   await page.goto(`${baseURL}/dashboard`);
   const journey = page.getByRole("region", { name: "Votre parcours" });
   await expect(journey.getByRole("heading", { name: "Votre parcours" })).toBeVisible();
