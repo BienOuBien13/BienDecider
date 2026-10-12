@@ -40,11 +40,13 @@ jobs:
       # Dummy value, only meaningful for the throwaway database above.
       SESSION_SECRET: ci-only-session-secret-not-used-anywhere-else
       UX_TEST_BASE_URL: http://localhost:3000
+      # Closes the admin area to an explicit list, as required before opening to external users.
+      ADMIN_EMAILS: ci-admin@example.invalid
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -56,6 +58,8 @@ jobs:
         run: npm run test:gmail
       - name: Backlog importer tests (no network)
         run: node --test scripts/sync-backlog.test.cjs
+      - name: Wiki pages build and relative links resolve
+        run: node scripts/build-wiki.cjs "$RUNNER_TEMP/wiki-pages" --strict
       - name: Delegation risk tests (no network)
         run: npm run test:delegation
       - name: Apply versioned migrations to the throwaway database
@@ -79,9 +83,11 @@ jobs:
         run: npm run test:brand
       - name: User journey tests (browser, throwaway database)
         run: npm run test:ux
+      - name: Security tests (forged cookies, lockout, cross-company isolation)
+        run: npm run test:security
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: |

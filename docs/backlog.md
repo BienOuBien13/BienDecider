@@ -2,7 +2,7 @@
 
 ## Suivi courant depuis le 2026-10-10
 
-**GitHub Issues est la source de vérité pour les US, responsables, priorités et statuts** : [US ouvertes](https://github.com/BienOuBien13/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus). Répartition et mise à jour : [github-tracking.md](github-tracking.md).
+**GitHub Issues est la source de vérité pour les US, responsables, priorités et statuts** : [US ouvertes](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus). Répartition et mise à jour : [github-tracking.md](github-tracking.md).
 
 Focus actuel demandé par les fondateurs : **domaine delegation en P1** ; état des 7 P1, dépendances et ordre de prise en charge dans [domaines.md](domaines.md#focus-actuel--délégation-p1). Les Issues restent la source de vérité des labels et affectations.
 
@@ -17,7 +17,7 @@ Décision CEO actée : garder l'esprit ("équipe virtuelle IA qui agit, pas qui 
 
 ## Décision du 2026-10-09 : BienDecider
 
-Le nom public devient **BienDecider**, domaine cible **https://www.biendecider.com** (HTTPS, pas HTTP). Le dépôt GitHub et le projet Vercel restent `pepito`. Les mentions Pepito/Pépito ci-dessous appartiennent à l'historique du produit.
+Le nom public devient **BienDecider**, domaine cible **https://www.biendecider.com** (HTTPS, pas HTTP). Depuis le 2026-10-11, le dépôt GitHub est `groupebienoubien/BienDecider` et le projet Vercel `bien-decider`. Les mentions Pepito/Pépito ci-dessous appartiennent à l'historique du produit.
 
 - [x] Nom remplacé dans la landing, la connexion, la navigation, les pages métier et les documents légaux.
 - [x] Métadonnées de marque et de partage configurées, langue française, base des URL publiques sur `https://www.biendecider.com`.

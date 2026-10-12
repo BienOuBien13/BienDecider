@@ -2,7 +2,7 @@
 
 ## En une minute
 
-**Une seule version partagée** : https://www.biendecider.com, hébergée par le projet Vercel `pepito`, avec sa base PostgreSQL actuelle. Vercel appelle cet environnement **Production**, même si le produit reste un prototype. Pas de staging, pas de branche `develop`. La CI teste sur une base jetable, recréée à chaque exécution.
+**Une seule version partagée** : https://www.biendecider.com, hébergée par le projet Vercel `bien-decider`, avec sa base PostgreSQL actuelle. Vercel appelle cet environnement **Production**, même si le produit reste un prototype. Pas de staging, pas de branche `develop`. La CI teste sur une base jetable, recréée à chaque exécution.
 
 **Le parcours de chaque changement :**
 
@@ -24,6 +24,7 @@ Les branches de travail ne sont pas déployées par Vercel : `vercel.json` désa
 | Fusion ou push sur `main` | GitHub Actions | Les mêmes contrôles, pour détecter une régression sur la branche partagée |
 | Fusion ou push sur `main` | Intégration GitHub de Vercel | Installation, migrations si activées, build et publication sur le domaine du prototype |
 | Déploiement Production réussi | GitHub Actions, workflow `Smoke test` | `/api/health` sert le commit déployé et la base répond, puis `test:brand` en lecture seule sur le domaine ; une Issue est ouverte en cas d'échec |
+| Fusion ou push sur `main` | GitHub Actions, workflow `Wiki` | Régénère le [wiki](https://github.com/groupebienoubien/BienDecider/wiki) depuis `wiki/`, `docs/` et le code ; `Checks` vérifie avant fusion que les pages se construisent et que les liens relatifs des guides pointent vers des fichiers existants |
 | Chaque lundi | Dependabot | Une PR groupée de mises à jour npm mineures et correctives, une pour les actions GitHub |
 | Relance manuelle | GitHub > Actions > CI ou Smoke test > Run workflow | Contrôles seulement, aucun déploiement ni changement de base |
 
@@ -33,6 +34,7 @@ Un seul job CI obligatoire, cache du téléchargement npm et annulation des anci
 
 La CI démarre un PostgreSQL de service, vide à chaque exécution, **jamais la base du prototype**. Elle y applique toutes les migrations de `prisma/migrations`, puis vérifie que `schema.prisma` ne contient aucun changement absent des migrations. Les valeurs `DATABASE_URL` et `SESSION_SECRET` du workflow sont factices et ne servent qu'à cette base.
 
+Les tests `test:gmail`, `test:delegation` et ceux de l'import du backlog tournent sans réseau. L'application compilée est ensuite démarrée dans le job : `test:brand` vérifie les pages publiques, `test:ux` les parcours connectés, avec des entreprises fictives créées dans la base jetable et des appels agents simulés, et `test:security` le refus des cookies falsifiés sur chaque route, le verrouillage après cinq échecs et l'isolation entre deux entreprises. **Toute nouvelle route API doit être déclarée dans `tests/security.spec.ts`**, sinon `Checks` échoue. Le build inclut TypeScript : pas de second typecheck. **Les avertissements ESLint bloquent** (`--max-warnings 0`). En cas d'échec, captures et journal de l'application sont joints à l'exécution.
 Les tests `test:gmail`, `test:delegation` et ceux de l'import du backlog tournent sans réseau. L'application compilée est ensuite démarrée dans le job : `test:brand` vérifie les pages publiques et `test:ux` les parcours connectés, avec des entreprises fictives créées dans la base jetable et des appels agents simulés. Le build inclut TypeScript : pas de second typecheck. **Les avertissements ESLint bloquent** (`--max-warnings 0`). En cas d'échec, captures et journal de l'application sont joints à l'exécution.
 
 ## Réglages à faire une seule fois
@@ -41,11 +43,11 @@ Ces réglages de comptes ne sont pas appliqués par les fichiers du dépôt. Un 
 
 ### GitHub
 
-1. Donner aux deux développeurs l'accès au dépôt `BienOuBien13/BienDecider` et vérifier que GitHub Actions est autorisé.
+1. Donner aux deux développeurs l'accès au dépôt `groupebienoubien/BienDecider` et vérifier que GitHub Actions est autorisé.
 2. Importer le ruleset versionné [../.github/rulesets/main.json](../.github/rulesets/main.json) : **Settings > Rules > Rulesets > New ruleset > Import a ruleset**, ou en ligne de commande avec un compte administrateur :
 
    ```bash
-   gh api -X POST repos/BienOuBien13/BienDecider/rulesets --input .github/rulesets/main.json
+   gh api -X POST repos/groupebienoubien/BienDecider/rulesets --input .github/rulesets/main.json
    ```
 
    Il impose sur `main` : pull request obligatoire, contrôle **`Checks`** requis sur une branche à jour, fusion par squash uniquement, force-push et suppression interdits, aucun bypass, y compris pour les administrateurs.
@@ -59,7 +61,7 @@ Si les protections ne sont pas disponibles avec le forfait/visibilité du dépô
 
 ### Vercel
 
-1. Conserver un seul projet `pepito`, connecté au dépôt, avec **Production Branch = main**. Selon l'interface, ce réglage se trouve dans **Settings > Environments > Production** ou dans la configuration Git.
+1. Conserver un seul projet `bien-decider`, connecté au dépôt, avec **Production Branch = main**. Selon l'interface, ce réglage se trouve dans **Settings > Environments > Production** ou dans la configuration Git.
 2. Utiliser Node.js **24.x** comme dans la CI. La commande de build est fixée par `vercel.json` (`npm run vercel-build`) ; aucun appel à `prisma db push` dans les commandes Vercel.
 3. Conserver le domaine et les variables actuelles dans **Production**. Aucun token Vercel ni credential PostgreSQL/Google/Anthropic n'est nécessaire dans GitHub Actions.
 4. Vérifier que les commits des deux développeurs sont autorisés par Vercel : leur email Git doit être associé à leur compte GitHub. Selon le plan Vercel, un accès à l'équipe ou un plan compatible peut être requis pour le second auteur ; un accès GitHub seul ne le garantit pas.

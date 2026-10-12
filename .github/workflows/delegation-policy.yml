@@ -23,7 +23,7 @@ jobs:
       issues: write
     steps:
       - name: Record updated delegation policy on the governance US
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const issues = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'all', per_page: 100 });
