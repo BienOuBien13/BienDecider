@@ -10,9 +10,30 @@ import { runPlanItem } from "@/lib/agents/plan-runner";
 import { createChatPlanItem, findLaunchablePlanItem, type PlanAgent } from "@/lib/agents/plan-items";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import { getFunnelStats, funnelLines } from "@/lib/funnel";
+import { CAPABILITY_CATALOG, recordUncoveredRequest } from "@/lib/agents/capabilities";
 import { getChatInstructionsForPlan, getPlanAndFunnelStatus, loadRecentChatHistory } from "@/lib/agents/chat-context";
 
 const PERSONA = PERSONAS.co_ceo;
+
+/**
+ * Outil commun au chat et au plan : noter une demande hors catalogue pour
+ * les pères fondateurs. N'exécute rien et ne promet rien au dirigeant.
+ */
+function uncoveredRequestTool(companyId: string, source: "chat" | "plan") {
+  return betaZodTool({
+    name: "record_uncovered_request",
+    description:
+      "Note pour les fondateurs de BienDecider une demande ou un objectif du dirigeant qu'aucun agent ne couvre. À appeler une fois par besoin non couvert, après l'avoir dit au dirigeant — jamais pour une demande que l'équipe sait traiter.",
+    inputSchema: z.object({
+      request: z.string().describe("Le besoin non couvert, en une ou deux phrases, sans nom ni coordonnée de personne"),
+      closestAlternative: z.string().optional().describe("Ce que tu as proposé à la place parmi ce que l'équipe sait faire — omettre si rien ne s'en rapproche"),
+    }),
+    run: async (input) => {
+      await recordUncoveredRequest(companyId, source, input.request, input.closestAlternative);
+      return "Demande notée pour les fondateurs de BienDecider. Aucun délai ni résultat n'est promis : dis-le tel quel au dirigeant.";
+    },
+  });
+}
 
 /**
  * Agent "Partenaire de croissance" (Paul, ex-"Co-CEO" — cf. docs/backlog.md) :
@@ -82,6 +103,8 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
       });
     },
   });
+
+  const recordUncovered = uncoveredRequestTool(companyId, "chat");
 
   // Toute délégation depuis le chat passe par une action du plan : créée
   // avec son brief (ou reprise si elle y figure déjà), puis lancée par le
@@ -155,7 +178,7 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
   const { finalMessage, usage } = await runToolLoop(anthropic.beta.messages.toolRunner({
     model: AGENT_MODEL,
     max_tokens: 2000,
-    tools: [getCurrentStatus, delegateMarketing, delegateContenu, delegateDemarchage],
+    tools: [getCurrentStatus, delegateMarketing, delegateContenu, delegateDemarchage, recordUncovered],
     system: [
       {
         type: "text",
@@ -175,6 +198,8 @@ Règles strictes, non négociables :
 - Tu ne fais JAMAIS exécuter une action réelle toi-même, même automatiquement : déléguer ne fait que créer des propositions, qui restent soumises à la validation du dirigeant dans le dashboard. Dis-le clairement si tu délègues.
 - Chaque délégation crée une action dans le plan, avec le brief que tu rédiges, et les productions y sont rattachées : dis au dirigeant qu'il la retrouvera dans son plan. Si sa demande correspond à une action déjà au plan avec le statut "propose", passe son identifiant (planItemId) au lieu d'en créer une seconde.
 - Tu ne construis pas de site web toi-même (${PERSONAS.contenu.name} ne fournit qu'un brief de contenu, pas le site), ni ne publies ou modifies quoi que ce soit toi-même sur les plateformes externes — sois honnête sur ce que tu ne sais pas faire plutôt que de promettre.
+- ${CAPABILITY_CATALOG}
+- Quand l'objectif ou une demande du dirigeant sort de ce catalogue : dis-le clairement et tout de suite, sans promettre un résultat ; propose ce qui s'en rapproche le plus parmi ce que l'équipe sait faire ; puis appelle record_uncovered_request pour que la demande remonte aux fondateurs de BienDecider, et dis au dirigeant qu'elle a été notée. Ne délègue pas à un agent une demande qu'il ne couvre pas.
 - Si on te demande de connecter un compte (Google, Instagram, Facebook) : explique que ça se fait via OAuth sur la page /connexions, et que tu ne dois JAMAIS demander ou recevoir un mot de passe dans cette conversation.
 - Pour déléguer à Contenu (sans actualité) ou Démarchage (sans cible), tu peux le faire sans information — les agents proposeront leurs propres idées génériques. Avec une info concrète donnée par le dirigeant, transmets-la pour des propositions plus ciblées.
 - Pour les pistes de prospection, seules des informations publiques et professionnelles sont acceptables — refuse poliment toute demande de cibler des particuliers avec leurs données personnelles.
@@ -287,7 +312,9 @@ Règles :
 - Si l'entreprise n'a pas de site, l'action "préparer le contenu du site" (contenu) est prioritaire : BienDecider le publie après validation.
 - Base-toi sur l'état réel ci-dessous — ne répète pas une action déjà proposée, au plan ou écartée.
 - Tiens compte de ce que le dirigeant a dit dans le chat (préférences, refus, priorités) : une action contraire à une consigne récente ne doit pas figurer au plan.
-- Priorise ce qui a le plus d'impact pour l'objectif, pas une liste exhaustive.`;
+- Priorise ce qui a le plus d'impact pour l'objectif, pas une liste exhaustive.
+- ${CAPABILITY_CATALOG}
+- Si l'objectif du dirigeant, ou une partie de cet objectif, sort de ce catalogue : ne propose aucune action qui ferait croire le contraire. Appelle record_uncovered_request une fois pour cette partie non couverte, puis propose seulement les actions du catalogue qui s'en rapprochent, en disant dans leur justification ce qu'elles ne couvrent pas.`;
 
   const dynamicSystem = `${await getRejectionContext(companyId)}
 ${await getChatInstructionsForPlan(companyId)}
@@ -300,7 +327,7 @@ ${funnelLines(funnel)}`;
   const { usage } = await runToolLoop(anthropic.beta.messages.toolRunner({
     model: AGENT_MODEL,
     max_tokens: 2000,
-    tools: [proposePlanItem],
+    tools: [proposePlanItem, uncoveredRequestTool(companyId, "plan")],
     system: [
       { type: "text", text: stableSystem, cache_control: { type: "ephemeral" } },
       { type: "text", text: dynamicSystem },

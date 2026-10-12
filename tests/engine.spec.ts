@@ -215,3 +215,37 @@ test("a request made in the chat becomes a plan action that can only be launched
   await prisma.actionPlanItem.update({ where: { id: item.id }, data: { status: "lance" } });
   expect(await findLaunchablePlanItem(company.id, "contenu", item.id)).toBeNull();
 });
+
+test("a request outside the catalogue is recorded for the founders and shown only to explicit admins", async ({ company, request }) => {
+  if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for engine tests.");
+  const { createHmac } = await import("node:crypto");
+  const { CAPABILITY_CATALOG, recordUncoveredRequest, listUncoveredRequests } = await import("../src/lib/agents/capabilities");
+  expect(CAPABILITY_CATALOG).toContain("Hors catalogue");
+  expect(CAPABILITY_CATALOG).toContain("publicité payante");
+
+  const marker = `demande-${randomUUID()}`;
+  await recordUncoveredRequest(company.id, "chat", `  Gérer ma comptabilité ${marker}  `, " Rien de proche ");
+  await recordUncoveredRequest(company.id, "plan", "x".repeat(5000));
+  const mine = (await listUncoveredRequests(200)).filter((entry) => entry.companyId === company.id);
+  expect(mine).toHaveLength(2);
+  const fromChat = mine.find((entry) => entry.source === "chat")!;
+  expect(fromChat).toMatchObject({ request: `Gérer ma comptabilité ${marker}`, closestAlternative: "Rien de proche", company: { name: "Atelier Test Moteur" } });
+  const fromPlan = mine.find((entry) => entry.source === "plan")!;
+  expect(fromPlan.request).toHaveLength(1000);
+  expect(fromPlan.closestAlternative).toBeNull();
+
+  const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((email) => email.trim()).filter(Boolean);
+  test.skip(admins.length === 0, "Page check needs ADMIN_EMAILS shared by the server and the tests, as in CI.");
+  const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
+  const cookie = (email: string) => {
+    const signature = createHmac("sha256", process.env.SESSION_SECRET!).update(email).digest("hex");
+    return { Cookie: `pepito_session=${Buffer.from(email).toString("base64url")}.${signature}` };
+  };
+  const asAdmin = await request.get(`${baseURL}/admin`, { headers: cookie(admins[0]) });
+  expect(asAdmin.status()).toBe(200);
+  const adminPage = await asAdmin.text();
+  expect(adminPage).toContain("Demandes hors catalogue");
+  expect(adminPage).toContain(marker);
+  const asOwner = await request.get(`${baseURL}/admin`, { headers: cookie(company.ownerEmail) });
+  expect(await asOwner.text()).not.toContain(marker);
+});

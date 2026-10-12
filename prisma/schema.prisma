@@ -54,6 +54,7 @@ model Company {
   planItems       ActionPlanItem[]
   usageEvents     UsageEvent[]
   leads           Lead[]
+  uncoveredRequests UncoveredRequest[]
 }
 
 /**
@@ -199,4 +200,19 @@ model DelegationRiskSetting {
   updatedBy   String
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
+}
+
+/**
+ * Demande ou objectif d'un dirigeant qu'aucun agent ne couvre. Paul le dit
+ * honnêtement, propose ce qui s'en rapproche et note la demande ici, pour
+ * que les pères fondateurs voient ce qui manque au catalogue (vue admin).
+ */
+model UncoveredRequest {
+  id                 String   @id @default(cuid())
+  companyId          String
+  company            Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  request            String // ce que le dirigeant voulait, reformulé par Paul sans donnée personnelle de tiers
+  closestAlternative String? // ce que Paul a proposé à la place
+  source             String // chat, plan
+  createdAt          DateTime @default(now())
 }
