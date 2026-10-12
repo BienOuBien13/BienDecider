@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runContenuAgent } from "@/lib/agents/contenu";
 import { getSessionCompany } from "@/lib/session";
+import { agentFailureMessage } from "@/lib/agents/agent-errors";
+import { PERSONAS } from "@/lib/agents/personas";
 
 export async function POST(request: NextRequest) {
   const company = await getSessionCompany();
@@ -14,7 +16,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(proposals, { status: 201 });
   } catch (error) {
     console.error("Erreur agent contenu:", error);
-    const message = error instanceof Error ? error.message : "Échec de l'exécution de l'agent";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: agentFailureMessage(error, PERSONAS.contenu.name) }, { status: 500 });
   }
 }

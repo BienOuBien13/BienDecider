@@ -3,6 +3,7 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import {
   PERSONAS,
@@ -201,20 +202,7 @@ Règles strictes, non négociables :
     usage,
   });
 
-  // Échec silencieux réel observé en prod (2026-10-05, entreprise "La
-  // Tonnelle") : l'agent a consommé 32k tokens sans produire une seule
-  // proposition, et rien ne prévenait l'utilisateur — l'action passait en
-  // "Terminée" comme si tout s'était bien passé. On lève une erreur
-  // explicite plutôt que de renvoyer un tableau vide silencieux.
-  if (createdProposalIds.length === 0) {
-    console.warn(
-      `Jean-Claude (demarchage) n'a rien produit — stop_reason: ${finalMessage.stop_reason}, usage total:`,
-      usage,
-    );
-    throw new Error(
-      `${PERSONA.name} n'a pas pu produire de résultat exploitable cette fois-ci. Réessayez.`,
-    );
-  }
+  ensureAgentProduced(PERSONA.name, createdProposalIds.length, { stopReason: finalMessage.stop_reason, usage });
 
   return prisma.agentProposal.findMany({
     where: { id: { in: createdProposalIds } },

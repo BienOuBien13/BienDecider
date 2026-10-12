@@ -3,6 +3,7 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
+import { ensureAgentProduced } from "@/lib/agents/agent-errors";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import {
   PERSONAS,
@@ -122,17 +123,7 @@ Derniers constats de ${PERSONAS.marketing.name} (audit/positionnement, à exploi
 
   await recordUsage({ companyId: company.id, agent: AGENT_NAME, model: AGENT_MODEL, usage });
 
-  // Même garde-fou que Jean-Claude (cf. docs/backlog.md) : un échec silencieux
-  // (0 proposition) ne doit jamais ressembler à un succès vide.
-  if (createdProposalIds.length === 0) {
-    console.warn(
-      `Camille (contenu) n'a rien produit — stop_reason: ${finalMessage.stop_reason}, usage total:`,
-      usage,
-    );
-    throw new Error(
-      `${PERSONA.name} n'a pas pu produire de résultat exploitable cette fois-ci. Réessayez.`,
-    );
-  }
+  ensureAgentProduced(PERSONA.name, createdProposalIds.length, { stopReason: finalMessage.stop_reason, usage });
 
   return prisma.agentProposal.findMany({
     where: { id: { in: createdProposalIds } },
