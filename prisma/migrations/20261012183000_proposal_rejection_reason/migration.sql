@@ -1,0 +1,1 @@
+ALTER TABLE "AgentProposal" ADD COLUMN "rejectionReason" TEXT;

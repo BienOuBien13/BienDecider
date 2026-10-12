@@ -2,6 +2,7 @@ import { z } from "zod";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
+import { getRejectionContext } from "@/lib/agents/rejection-context";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import {
   PERSONAS,
@@ -95,7 +96,8 @@ Règles strictes :
 - Si aucune actualité n'est fournie, génère tes propres idées honnêtes (conseil pratique, présentation d'un service, FAQ) — jamais un faux événement présenté comme réel.
 - Une proposition = un contenu complet et directement utilisable, pas de placeholder "[à compléter]".`;
 
-  const dynamicSystem = `${briefLine(options.brief)}
+  const dynamicSystem = `${await getRejectionContext(companyId)}
+${briefLine(options.brief)}
 Derniers constats de ${PERSONAS.marketing.name} (audit/positionnement, à exploiter si pertinent) : ${
     recentFindings.map((f) => `${f.title}`).join("; ") || "aucun encore"
   }.`;

@@ -5,6 +5,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { config } from "dotenv";
 import { encryptGmailToken } from "../src/lib/oauth/gmail";
 import { companyProfileLines, objectiveLine } from "../src/lib/agents/personas";
+import { getRejectionContext } from "../src/lib/agents/rejection-context";
 
 config({ quiet: true });
 
@@ -256,6 +257,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(manual).toBeVisible();
     const planned = page.locator("article").filter({ hasText: "Publication issue du plan" });
     await planned.getByRole("button", { name: "Rejeter", exact: true }).click();
+    await planned.getByRole("button", { name: "Confirmer le rejet", exact: true }).click();
     await expect(planned.getByText("Rejetée", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 1", exact: true })).toBeVisible();
     const site = await prisma.agentProposal.findFirstOrThrow({ where: { companyId: company.id, kind: "site_web_content" } });
@@ -280,6 +282,53 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(page.locator("main").getByRole("alert")).toHaveText("Agent indisponible pour le test");
     await expect(page.getByRole("button", { name: "Confier la demande" }).first()).toBeEnabled();
   } finally { await prisma.$disconnect(); }
+});
+
+test("rejection reasons are optional, persisted in history and available to agents", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "demarchage", kind: "prospect", title: "Prospect hors cible", content: "Organisation proposée",
+    } });
+    const lead = await prisma.lead.create({ data: {
+      companyId: company.id, proposalId: proposal.id, name: "Prospect hors cible", reason: "Proximité géographique", stage: "propose",
+    } });
+    const patch = (data: unknown) => page.request.patch(`${baseURL}/api/proposals/${proposal.id}`, { data });
+    for (const rejectionReason of ["x".repeat(1001), 42, null]) {
+      expect((await patch({ status: "rejetee", rejectionReason })).status()).toBe(400);
+    }
+    expect((await patch({ status: "validee", rejectionReason: "Pas ma cible" })).status()).toBe(400);
+    expect((await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } })).status).toBe("en_attente");
+
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const card = page.locator("article").filter({ hasText: proposal.title });
+    await card.getByRole("button", { name: "Rejeter", exact: true }).click();
+    await card.getByLabel("Raison du rejet (facultative)").fill("Hors de ma zone d'intervention");
+    await card.getByRole("button", { name: "Annuler le rejet", exact: true }).click();
+    expect((await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } })).status).toBe("en_attente");
+
+    await card.getByRole("button", { name: "Rejeter", exact: true }).click();
+    await card.getByLabel("Raison du rejet (facultative)").fill("  Hors de ma zone d'intervention  ");
+    await card.getByRole("button", { name: "Confirmer le rejet", exact: true }).click();
+    await expect(card.getByText("Rejetée", { exact: true })).toBeVisible();
+    const saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+    expect(saved.rejectionReason).toBe("Hors de ma zone d'intervention");
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("ecarte");
+    expect(await getRejectionContext(company.id)).toContain(saved.rejectionReason!);
+    expect(await getRejectionContext("nonexistent-company")).not.toContain(saved.rejectionReason!);
+
+    await page.goto(`${baseURL}/dashboard?view=historique`);
+    await page.reload();
+    await expect(page.locator("article").filter({ hasText: proposal.title }).getByText("Raison du rejet : Hors de ma zone d'intervention", { exact: true })).toBeVisible();
+
+    const optional = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "social_post", title: "Refus sans motif", content: "Publication proposée",
+    } });
+    expect((await page.request.patch(`${baseURL}/api/proposals/${optional.id}`, { data: { status: "rejetee" } })).status()).toBe(200);
+    expect((await prisma.agentProposal.findUniqueOrThrow({ where: { id: optional.id } })).rejectionReason).toBeNull();
+  } finally {
+    await prisma.$disconnect();
+  }
 });
 
 test("diagnostic to plan, keyboard dialog and responsive navigation", async ({ page, company }, testInfo) => {

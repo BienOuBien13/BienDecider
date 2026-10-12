@@ -20,7 +20,7 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { status, content } = body;
+  const { status, content, rejectionReason } = body;
 
   if (!ALLOWED_STATUSES.includes(status)) {
     return NextResponse.json(
@@ -31,6 +31,9 @@ export async function PATCH(
   if (status === "modifiee" && (typeof content !== "string" || !content.trim())) {
     return NextResponse.json({ error: "Le contenu modifié ne peut pas être vide" }, { status: 400 });
   }
+  if (rejectionReason !== undefined && (status !== "rejetee" || typeof rejectionReason !== "string" || rejectionReason.length > 1000)) {
+    return NextResponse.json({ error: "La raison du rejet doit être un texte de 1 000 caractères maximum, uniquement pour un rejet." }, { status: 400 });
+  }
 
   // Décision humaine actée ici — aucune exécution réelle déclenchée
   // automatiquement (cf. docs/architecture-technique.md § Flux de validation).
@@ -39,6 +42,7 @@ export async function PATCH(
     data: {
       status,
       content: status === "modifiee" ? content.trim() : undefined,
+      rejectionReason: status === "rejetee" ? rejectionReason?.trim() || null : null,
       decidedAt: new Date(),
     },
   });

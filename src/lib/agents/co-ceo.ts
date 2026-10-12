@@ -3,6 +3,7 @@ import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type Anthropic from "@anthropic-ai/sdk";
 import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { prisma } from "@/lib/prisma";
+import { getRejectionContext } from "@/lib/agents/rejection-context";
 import { PERSONAS, objectiveLine, directionLine, companyProfileLines } from "@/lib/agents/personas";
 import { runMarketingAgent } from "@/lib/agents/marketing";
 import { runContenuAgent } from "@/lib/agents/contenu";
@@ -69,6 +70,7 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
         }),
       ]);
       return JSON.stringify({
+        refusRecents: await getRejectionContext(companyId),
         propositionsEnAttente: pending.map((p) => ({
           id: p.id,
           agent: p.agent,
@@ -268,7 +270,8 @@ Règles :
 - Base-toi sur l'état réel ci-dessous — ne répète pas une action déjà proposée, au plan ou écartée.
 - Priorise ce qui a le plus d'impact pour l'objectif, pas une liste exhaustive.`;
 
-  const dynamicSystem = `Propositions déjà en attente de validation : ${pendingProposals.map((p) => `${p.agent}: ${p.title}`).join("; ") || "aucune"}.
+  const dynamicSystem = `${await getRejectionContext(companyId)}
+Propositions déjà en attente de validation : ${pendingProposals.map((p) => `${p.agent}: ${p.title}`).join("; ") || "aucune"}.
 Derniers constats (audit, concurrence) : ${recentFindings.map((f) => f.title).join("; ") || "aucun"}.
 Actions déjà au plan (ne les répète pas) : ${existingPlan.map((i) => i.title).join("; ") || "aucune"}.
 Actions ÉCARTÉES par le dirigeant, avec sa raison — ne les repropose pas et tiens compte de la raison : ${discarded.map((i) => `"${i.title}" (${i.feedback || "sans raison"})`).join("; ") || "aucune"}.

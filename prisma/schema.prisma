@@ -176,6 +176,7 @@ model AgentProposal {
   status      String   @default("en_attente") // en_attente, validee, modifiee, rejetee, executee
   createdAt   DateTime @default(now())
   decidedAt   DateTime?
+  rejectionReason String?
   planItemId  String? // action du plan de Paul dont cette proposition découle (lisibilité plan → agent → proposition)
   planItem    ActionPlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
   executionLog ExecutionLog?
