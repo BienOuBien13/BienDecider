@@ -4,6 +4,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { createHmac, randomUUID } from "node:crypto";
 import { config } from "dotenv";
 import { encryptGmailToken } from "../src/lib/oauth/gmail";
+import { companyProfileLines, objectiveLine } from "../src/lib/agents/personas";
 
 config({ quiet: true });
 
@@ -333,5 +334,46 @@ test("explicit admin can tune global risk level but cannot lower the effective f
     expect(deniedUpdate.status()).toBe(403);
   } finally {
     await otherContext.close();
+  }
+});
+
+test("clearing optional company profile fields removes them from storage and agent context", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const previousProfile = {
+    website: "https://old.example.invalid",
+    socialHandles: "@old_profile",
+    objective: "Ancien objectif à remplacer",
+    description: "Ancienne description de test",
+    phone: "+33102030405",
+    certifications: "Ancien label de test",
+    openingHours: "Anciennes heures de test",
+  };
+
+  try {
+    await prisma.company.update({ where: { id: company.id }, data: previousProfile });
+    await page.goto(`${baseURL}/onboarding`);
+    await expect(page.getByPlaceholder("Site web (optionnel — beaucoup de TPE n'en ont pas)")).toHaveValue(previousProfile.website);
+    await expect(page.locator('input[placeholder^="Compte Instagram/Facebook"]')).toHaveValue(previousProfile.socialHandles);
+
+    await page.getByPlaceholder("ex: 10 nouveaux clients par mois").fill("");
+    await page.locator("textarea").fill("");
+    await page.getByPlaceholder("Téléphone affiché aux clients (optionnel)").fill("");
+    await page.getByPlaceholder("Certifications / labels (ex: RGE, optionnel)").fill("");
+    await page.getByPlaceholder("Horaires d'ouverture (optionnel)").fill("");
+    await page.getByPlaceholder("Site web (optionnel — beaucoup de TPE n'en ont pas)").fill("");
+    await page.locator('input[placeholder^="Compte Instagram/Facebook"]').fill("");
+    await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+    await expect(page).toHaveURL(`${baseURL}/dashboard`);
+
+    const cleared = await prisma.company.findUniqueOrThrow({ where: { id: company.id } });
+    for (const field of Object.keys(previousProfile) as (keyof typeof previousProfile)[]) {
+      expect(cleared[field], `${field} should be cleared`).toBeNull();
+    }
+    const agentContext = `${companyProfileLines(cleared)}\n${objectiveLine(cleared)}`;
+    for (const value of Object.values(previousProfile)) {
+      expect(agentContext).not.toContain(value);
+    }
+  } finally {
+    await prisma.$disconnect();
   }
 });

@@ -55,18 +55,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "targetDate invalide" }, { status: 400 });
   }
   const toInt = (v: unknown) => (v == null || v === "" ? null : Number(v));
+  const clearableText = (value: unknown) =>
+    typeof value === "string" ? value.trim() || null : value;
 
   const data = {
     name,
     trade,
     servingArea,
-    website,
-    socialHandles,
-    objective,
-    description,
-    phone,
-    certifications,
-    openingHours,
+    website: clearableText(website),
+    socialHandles: clearableText(socialHandles),
+    objective: clearableText(objective),
+    description: clearableText(description),
+    phone: clearableText(phone),
+    certifications: clearableText(certifications),
+    openingHours: clearableText(openingHours),
     monthlyRevenue: toInt(monthlyRevenue),
     revenueTarget: toInt(revenueTarget),
     targetDate: parsedTargetDate,
