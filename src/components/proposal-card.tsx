@@ -1,6 +1,7 @@
 "use client";
 
 import type { AgentProposal } from "@prisma/client";
+import { useState } from "react";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { assessActionRisk } from "@/lib/delegation-risk";
 
@@ -42,12 +43,14 @@ export function ProposalCard({
   riskSettings,
 }: {
   proposal: AgentProposal;
-  onDecision: (id: string, status: "validee" | "rejetee") => void;
+  onDecision: (id: string, status: "validee" | "modifiee" | "rejetee", content?: string) => Promise<boolean>;
   onExecute?: (id: string) => void;
   busy?: boolean;
   showAgent?: boolean;
   riskSettings?: Record<string, string>;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(proposal.content);
   const persona = PERSONAS[proposal.agent as Exclude<AgentKey, "co_ceo">];
   const risk = assessActionRisk(proposal.kind, {}, riskSettings?.[proposal.kind]);
   let displayContent = proposal.content;
@@ -65,6 +68,11 @@ export function ProposalCard({
     proposal.kind === "site_web_content" &&
     ["validee", "modifiee"].includes(proposal.status) &&
     onExecute;
+
+  async function saveEditedContent(event: React.FormEvent) {
+    event.preventDefault();
+    if (await onDecision(proposal.id, "modifiee", editedContent.trim())) setEditing(false);
+  }
 
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-4">
@@ -100,26 +108,63 @@ export function ProposalCard({
         </ul>
         <p className="mt-1 text-xs font-medium text-slate-700">Dans ce prototype, toute action réelle reste soumise à votre validation.</p>
       </details>
-      <details className="mt-1">
-        <summary className="cursor-pointer text-xs text-indigo-600">Voir le contenu</summary>
-        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{displayContent}</p>
-      </details>
+      {editing ? (
+        <form onSubmit={saveEditedContent} className="mt-3 space-y-2">
+          <label htmlFor={`proposal-content-${proposal.id}`} className="text-xs font-medium text-slate-700">Modifier le contenu</label>
+          <textarea
+            id={`proposal-content-${proposal.id}`}
+            aria-label="Modifier le contenu"
+            value={editedContent}
+            onChange={(event) => setEditedContent(event.target.value)}
+            rows={6}
+            required
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" disabled={busy || !editedContent.trim()} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">
+              Enregistrer et valider la version
+            </button>
+            <button type="button" onClick={() => { setEditedContent(proposal.content); setEditing(false); }} disabled={busy} className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50">
+              Annuler la modification
+            </button>
+          </div>
+        </form>
+      ) : (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-xs text-indigo-600">Voir le contenu</summary>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{displayContent}</p>
+        </details>
+      )}
       {proposal.status === "en_attente" && (
         <div className="mt-3 flex gap-2">
-          <button
-            onClick={() => onDecision(proposal.id, "validee")}
-            disabled={busy}
-            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-          >
-            Valider
-          </button>
-          <button
-            onClick={() => onDecision(proposal.id, "rejetee")}
-            disabled={busy}
-            className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50"
-          >
-            Rejeter
-          </button>
+          {!editing && (
+            <button
+              type="button"
+              onClick={() => { setEditedContent(proposal.content); setEditing(true); }}
+              disabled={busy}
+              className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm text-indigo-800 disabled:opacity-50"
+            >
+              Modifier
+            </button>
+          )}
+          {!editing && (
+            <>
+              <button
+                onClick={() => onDecision(proposal.id, "validee")}
+                disabled={busy}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+              >
+                Valider
+              </button>
+              <button
+                onClick={() => onDecision(proposal.id, "rejetee")}
+                disabled={busy}
+                className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50"
+              >
+                Rejeter
+              </button>
+            </>
+          )}
         </div>
       )}
       {canPublishSite && (

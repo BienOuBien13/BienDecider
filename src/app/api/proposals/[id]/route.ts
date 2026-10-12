@@ -28,6 +28,9 @@ export async function PATCH(
       { status: 400 },
     );
   }
+  if (status === "modifiee" && (typeof content !== "string" || !content.trim())) {
+    return NextResponse.json({ error: "Le contenu modifié ne peut pas être vide" }, { status: 400 });
+  }
 
   // Décision humaine actée ici — aucune exécution réelle déclenchée
   // automatiquement (cf. docs/architecture-technique.md § Flux de validation).
@@ -35,7 +38,7 @@ export async function PATCH(
     where: { id },
     data: {
       status,
-      content: status === "modifiee" && content ? content : undefined,
+      content: status === "modifiee" ? content.trim() : undefined,
       decidedAt: new Date(),
     },
   });

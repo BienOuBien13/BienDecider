@@ -104,15 +104,20 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
     finally { setBusyId(null); }
   }
 
-  async function handleDecision(proposalId: string, status: "validee" | "rejetee") {
+  async function handleDecision(proposalId: string, status: "validee" | "modifiee" | "rejetee", content?: string): Promise<boolean> {
     setBusyId(proposalId);
     setError(null);
     try {
-      await request(`/api/proposals/${proposalId}`, "PATCH", { status });
+      await request(`/api/proposals/${proposalId}`, "PATCH", { status, ...(content === undefined ? {} : { content }) });
       setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
-      setNotice(status === "validee" ? "Production validée. La validation ne vaut pas publication ou envoi." : "Production rejetée.");
-    } catch (error) { reportError(error); }
+      setNotice(status === "modifiee"
+        ? "Version modifiée enregistrée et validée. Aucune action n'a été exécutée automatiquement."
+        : status === "validee"
+          ? "Production validée. La validation ne vaut pas publication ou envoi."
+          : "Production rejetée.");
+      return true;
+    } catch (error) { reportError(error); return false; }
     finally { setBusyId(null); }
   }
 
