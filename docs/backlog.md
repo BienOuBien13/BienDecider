@@ -24,8 +24,8 @@ Le nom public devient **BienDecider**, domaine cible **https://www.biendecider.c
 - [x] Prompts actifs des quatre agents mis à jour. Pas de réécriture des productions ou conversations historiques.
 - [x] Contact public `contact@biendecider.com` ajouté aux liens de contact et aux documents légaux ; Gmail personnel non exposé dans l'interface ni consigné dans le dépôt.
 - [x] Dépôt/package/cookies inchangés : aucune migration de base, aucune rupture technique liée au renommage.
-- [x] Domaine configuré et `www.biendecider.com` opérationnel sur Vercel, confirmé par le CEO le 2026-10-09. Vérifier séparément la redirection du domaine nu et la conservation des chemins.
-- [x] Bascule DNS web déclarée réalisée par le CEO après le premier contrôle OVH du 2026-10-09. Conserver les MX/TXT de messagerie ; une résolution DNS ne confirme pas la redirection email.
+- [ ] Domaine personnalisé en attente de correction DNS/certificat (contrôle du 2026-10-12 : `@` et `www` renvoient `203.191.35.125`, TLS invalide). Corriger selon [domain-email-setup.md](domain-email-setup.md), puis vérifier redirection du domaine nu et conservation des chemins.
+- [ ] Bascule OVH/Vercel non confirmée dans les DNS publics. Conserver les MX/TXT de messagerie ; une résolution DNS ne confirme pas la redirection email.
 - [ ] Créer la redirection OVH `contact@biendecider.com` vers le Gmail indiqué par le CEO, puis tester la réception depuis une autre adresse (inbox et spam). Configuration externe, pas une route Next.js.
 - [ ] Mettre à jour les écrans de consentement Google/Meta (BienDecider), domaine autorisé, URLs légales et callbacks exacts du nouveau domaine. Reconnexion nécessaire sur le nouveau domaine.
 - [ ] Vérifier HTTPS, domaine nu/www, connexion, publication d'un site et réception des demandes de contact avant d'annoncer le domaine actif.

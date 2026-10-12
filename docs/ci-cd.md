@@ -34,8 +34,7 @@ Un seul job CI obligatoire, cache du téléchargement npm et annulation des anci
 
 La CI démarre un PostgreSQL de service, vide à chaque exécution, **jamais la base du prototype**. Elle y applique toutes les migrations de `prisma/migrations`, puis vérifie que `schema.prisma` ne contient aucun changement absent des migrations. Les valeurs `DATABASE_URL` et `SESSION_SECRET` du workflow sont factices et ne servent qu'à cette base.
 
-Les tests `test:gmail`, `test:delegation` et ceux de l'import du backlog tournent sans réseau. L'application compilée est ensuite démarrée dans le job : `test:brand` vérifie les pages publiques, `test:ux` les parcours connectés, avec des entreprises fictives créées dans la base jetable et des appels agents simulés, et `test:security` le refus des cookies falsifiés sur chaque route, le verrouillage après cinq échecs et l'isolation entre deux entreprises. **Toute nouvelle route API doit être déclarée dans `tests/security.spec.ts`**, sinon `Checks` échoue. Le build inclut TypeScript : pas de second typecheck. **Les avertissements ESLint bloquent** (`--max-warnings 0`). En cas d'échec, captures et journal de l'application sont joints à l'exécution.
-Les tests `test:gmail`, `test:delegation` et ceux de l'import du backlog tournent sans réseau. L'application compilée est ensuite démarrée dans le job : `test:brand` vérifie les pages publiques et `test:ux` les parcours connectés, avec des entreprises fictives créées dans la base jetable et des appels agents simulés. Le build inclut TypeScript : pas de second typecheck. **Les avertissements ESLint bloquent** (`--max-warnings 0`). En cas d'échec, captures et journal de l'application sont joints à l'exécution.
+Les tests `test:gmail`, `test:delegation`, `test:security` et ceux de l'import du backlog tournent sans réseau. L'application compilée est ensuite démarrée dans le job : `test:brand` vérifie les pages publiques, `test:ux` les parcours connectés sur des entreprises fictives en base jetable, et `test:security` le refus des cookies falsifiés, le verrouillage après cinq échecs et l'isolation entre entreprises. **Toute nouvelle route API doit être déclarée dans `tests/security.spec.ts`**, sinon `Checks` échoue. Le build inclut TypeScript ; pas de second typecheck. **Les avertissements ESLint bloquent** (`--max-warnings 0`). En cas d'échec, captures et journal de l'application sont joints à l'exécution.
 
 ## Réglages à faire une seule fois
 
@@ -134,24 +133,13 @@ Commiter `schema.prisma` et le dossier de migration généré dans la même PR. 
 
 **Application au déploiement.** Le build Vercel de production lance [scripts/migrate-on-deploy.cjs](../scripts/migrate-on-deploy.cjs), qui exécute `prisma migrate deploy` uniquement si la variable Vercel `MIGRATE_ON_DEPLOY` vaut `1`. Une migration en échec arrête le build : la version précédente reste servie.
 
-**Activation, à faire une seule fois par le développeur désigné.** La base actuelle a été créée avec `db push` et ne connaît pas encore l'historique des migrations. Avec la `DATABASE_URL` de production dans le terminal, sans la partager :
+**État de la base prototype, vérifié le 2026-10-11.** Le baseline `0_init` a été enregistré avec `prisma migrate resolve --applied 0_init`, puis la migration additive de `DelegationRiskSetting` a été appliquée avec `prisma migrate deploy`. Le diff Prisma final a affiché **No difference detected**. Le baseline `0_init` versionné dans `main` contient désormais cette table. **Ne pas relancer `migrate resolve --applied 0_init` ni `db push`** : ils ne sont pas nécessaires et `db push` n'est plus le processus retenu.
 
-1. Vérifier qu'une sauvegarde récente existe chez l'hébergeur de la base.
-2. Vérifier que la base correspond au schéma versionné ; la commande doit afficher un diff vide :
+La sauvegarde de l'hébergeur n'était pas disponible sur le forfait utilisé ; le propriétaire a explicitement choisi de continuer sans sauvegarde. Consigner cette limite comme risque accepté, sans présenter la base comme sauvegardée. Aucune autre migration ne doit être appliquée manuellement sans nouvelle revue.
 
-   ```bash
-   npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
-   ```
+**Reste à confirmer dans Vercel** : `MIGRATE_ON_DEPLOY=1` dans l'environnement **Production** du projet `bien-decider`. Après activation, lors du prochain déploiement `main`, vérifier dans les Build Logs que `prisma migrate deploy` réussit et qu'aucune migration n'est en attente. Si cette variable n'est pas configurée, le hook `scripts/migrate-on-deploy.cjs` saute la migration et les changements de schéma futurs ne seront pas appliqués automatiquement. Si le build échoue à la migration, le déploiement précédent reste servi ; corriger la cause avant toute relance.
 
-3. Déclarer la migration initiale comme déjà appliquée ; cela crée seulement la table de suivi `_prisma_migrations`, sans toucher aux données :
-
-   ```bash
-   npx prisma migrate resolve --applied 0_init
-   ```
-
-4. Ajouter `MIGRATE_ON_DEPLOY=1` dans les variables **Production** de Vercel. Si `DATABASE_URL` passe par un pooler de connexions, vérifier que `migrate deploy` fonctionne au premier déploiement ; sinon fournir une URL directe pour les migrations.
-
-Tant que l'étape 4 n'est pas faite, les déploiements se comportent comme avant et tout changement de schéma reste à appliquer manuellement par le développeur désigné, avec `npx prisma migrate deploy`.
+Pour toute nouvelle évolution de schéma, créer la migration dans une base de développement dédiée avec `npx prisma migrate dev`, relire son SQL dans la PR, puis laisser `migrate deploy` l'appliquer au déploiement Production. Ne jamais exposer la `DATABASE_URL` dans une issue, une PR ou un chat.
 
 ## Si quelque chose échoue
 
@@ -179,6 +167,7 @@ Une urgence ne doit pas devenir le chemin normal. Si un administrateur utilise e
 - [ ] Administrateur : importer le ruleset `main`, n'autoriser que le squash et activer la suppression automatique des branches.
 - [ ] Administrateur : activer secret scanning, push protection et alertes Dependabot.
 - [ ] Administrateur : vérifier Node 24, branche Production main et accès Vercel des deux auteurs.
-- [ ] Développeur désigné : aligner la base sur la migration `0_init`, puis définir `MIGRATE_ON_DEPLOY=1` dans Vercel.
+- [x] Baseline `0_init` et migration de `DelegationRiskSetting` appliqués à la base prototype le 2026-10-11 ; diff final vide. Aucune sauvegarde n'était disponible ; le propriétaire a choisi de continuer sans.
+- [ ] Administrateur Vercel : vérifier ou ajouter `MIGRATE_ON_DEPLOY=1` en Production, puis confirmer le prochain `prisma migrate deploy` dans les Build Logs.
 
 La configuration versionnée définit le processus ; les cases d'administration doivent être cochées après vérification dans les consoles, pas déduites d'un commit.

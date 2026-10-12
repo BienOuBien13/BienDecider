@@ -60,6 +60,22 @@ Une US transverse reçoit un pilote unique qui possède l'Issue et la PR ; l'aut
 
 Le filtre [US ouvertes sans responsable](https://github.com/groupebienoubien/BienDecider/issues?q=is%3Aissue%20is%3Aopen%20label%3Atype%3Aus%20no%3Aassignee) permet de faire le tri. Les US `backlog` ne sont pas toutes à assigner immédiatement : attribuer le propriétaire quand une US P0/P1 passe à `ready` et avant `in-progress`. Ne jamais laisser une US `in-progress` sans responsable.
 
+### Réservation actuelle de Remi
+
+Le 2026-10-12, l'Issue **[#1 — Protéger `main` et finaliser la configuration Vercel](https://github.com/groupebienoubien/BienDecider/issues/1)** est `in-progress` mais GitHub affiche **No one assigned**. Son historique désigne Remi (`RemiJolivalt`) pour les réglages Vercel et le suivi de migration. **Samir ne commence pas #1** : Remi en est le pilote jusqu'à clôture. Il faut encore renseigner `RemiJolivalt` dans **Assignees** ; l'environnement de travail n'a pas de session GitHub avec droits d'écriture, donc cette modification distante n'a pas été appliquée par l'assistant.
+
+Checklist restante pour #1 :
+
+- [ ] Vercel > projet `bien-decider` > **Settings > Git** : Connected Git Repository = `groupebienoubien/BienDecider` ; Production Branch = `main`.
+- [ ] Vercel > **Settings > General / Build and Deployment** : Node.js Version = `24.x`.
+- [ ] Confirmer qu'une fusion sur `main` déclenche un déploiement Production ; confirmer que le compte de Samir est autorisé à déployer également.
+- [ ] En **Settings > Environment Variables**, confirmer `MIGRATE_ON_DEPLOY=1` pour **Production**. Ne jamais publier les valeurs des autres variables.
+- [ ] Actualiser la description de l'Issue #1 : retirer ses consignes obsolètes `0 approbation` et `fusion après 4 secondes`; le ruleset versionné exige maintenant une approbation humaine et `Checks`.
+
+Faits déjà vérifiés : PR #123 fusionnée ; `origin` local pointe vers le dépôt transféré ; baseline Prisma enregistré et migration `DelegationRiskSetting` appliquée le 2026-10-11 ; diff Prisma final vide. **Ne pas refaire `migrate resolve` ni `db push`.** La sauvegarde automatique n'était pas disponible sur le forfait et le propriétaire a explicitement accepté de continuer sans ; ce risque reste documenté. Voir [ci-cd.md](ci-cd.md).
+
+L'Issue **[#3 — Recette du domaine et OVH](https://github.com/groupebienoubien/BienDecider/issues/3)** est une démarche externe portée par Remi : ajouter également `RemiJolivalt` dans **Assignees** avant le travail. Samir ne la prend pas sans transfert explicite. L'état OVH et les enregistrements exacts sont détaillés dans [domain-email-setup.md](domain-email-setup.md). Les Issues Gmail #5 et Meta #6 sont différées à la demande du propriétaire : ne pas les prendre ni les assigner pour l'instant. Une préférence écrite ici ne remplace pas l'assignee effectif côté GitHub.
+
 1. Choisir ensemble les deux prochaines US, selon priorite et dependances. Mettre a jour les criteres si necessaire. Chacun commence par une seule US active.
 2. Dans **Assignees**, assigner une personne responsable. Ne pas affecter silencieusement une US a l'autre ; confirmer qu'elle est disponible. Un second participant peut etre mentionne dans le corps.
 3. Avant de coder, passer a `status:in-progress` et nommer la branche `feat/<numero>-description` ou `fix/<numero>-description`. Pour une demarche externe, le responsable suit la console et note la decision dans l'Issue.

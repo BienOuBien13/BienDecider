@@ -4,16 +4,23 @@ Décision du 2026-10-09 : marque BienDecider, URL de référence `https://www.bi
 
 ## Statut
 
-Le domaine et `www.biendecider.com` sur Vercel sont déclarés opérationnels par le CEO le 2026-10-09, après le contrôle initial qui pointait encore vers OVH. Les étapes ci-dessous restent une procédure de référence, pas une demande de refaire la zone. La réception de `contact`, la redirection du domaine nu et les callbacks OAuth restent à tester séparément. Le DNS seul ne prouve pas le fonctionnement du transfert email.
+**Vérification du 2026-10-12 : le domaine personnalisé ne passe toujours pas HTTPS.** Les résolveurs publics `1.1.1.1` et `8.8.8.8` renvoient `203.191.35.125` pour `biendecider.com` et `www.biendecider.com`; les deux noms échouent à la validation du certificat (`SEC_E_WRONG_PRINCIPAL`). Le domaine `bien-decider.vercel.app` répond, donc le défaut observé concerne le DNS/certificat du domaine personnalisé. La capture OVH montrait des valeurs nouvelles, mais elles ne sont pas encore publiées par les DNS interrogés. La réception de `contact` et les callbacks OAuth restent à tester séparément.
 
 ## 1. Relier le domaine à Vercel
 
-1. Ouvrir le projet **pepito** dans Vercel, **Settings > Domains**.
-2. Ajouter **www.biendecider.com** à l'environnement Production, puis **biendecider.com**. Configurer la redirection du domaine nu vers **https://www.biendecider.com**.
-3. Copier les valeurs DNS indiquées pour ce projet : en général un **A** pour le domaine nu et un **CNAME** pour `www`. Ne pas réutiliser une IP ou un CNAME trouvés dans un ancien tutoriel : Vercel fournit les valeurs actuelles.
-4. Dans OVHcloud, ouvrir **Web Cloud > Noms de domaine > biendecider.com > Zone DNS**. Exporter/sauvegarder la zone avant modification. Remplacer les enregistrements web A/AAAA/CNAME conflictuels pour ces deux hôtes par ceux fournis par Vercel. Pour le domaine nu, le champ sous-domaine est vide ; pour le sous-domaine, il est `www`.
-5. **Conserver les serveurs DNS OVH, les MX et les TXT de messagerie (SPF, DKIM, DMARC).** Ne pas réinitialiser la zone. Une redirection web OVH vers une URL Vercel n'est pas un rattachement de domaine : privilégier les DNS ci-dessus. Retirer uniquement les anciennes redirections/entrées web qui entrent en conflit.
-6. Ajouter un TXT de vérification uniquement si Vercel le demande. Attendre la propagation puis vérifier **Valid Configuration** et le certificat HTTPS actif sur les deux domaines.
+1. Dans Vercel, ouvrir l'équipe **groupe-bienou-bien**, le projet **bien-decider**, puis **Settings > Domains**. Vérifier que `www.biendecider.com` et `biendecider.com` sont tous deux assignés à Production. La carte de chaque nom donne la valeur DNS attendue : utiliser ces valeurs comme source de vérité.
+2. Dans la carte Vercel de `biendecider.com`, relever l'A record exact. La capture OVH fournie montre `216.198.79.1`, et cet A est cohérent avec le projet si la carte Vercel affiche bien cette même IP. Le DNS publié répond encore `203.191.35.125`; il faut donc remplacer l'ancien A `@` par `216.198.79.1` après confirmation dans Vercel.
+3. Dans la carte Vercel de `www.biendecider.com`, relever le CNAME exact. Dans OVH, supprimer l'enregistrement `A` de `www` et créer à sa place un `CNAME` nommé `www` vers cette cible, avec le point final si OVH le demande. La cible `1a866c5be6c27cb7.vercel-dns-017.com.` montrée pour `*` est une cible de wildcard : **ne l'utiliser pour `www` que si la carte Vercel de `www.biendecider.com` affiche exactement cette même cible**. Ne pas créer l'enregistrement `*` pour corriger `www`.
+4. Dans OVHcloud, ouvrir **Web Cloud > Noms de domaine > biendecider.com > Zone DNS**. Modifier uniquement les hôtes web concernés :
+
+	| Sous-domaine OVH | Type | Valeur attendue |
+	|---|---|---|
+	| `@` (ou champ vide) | `A` | `216.198.79.1`, uniquement si confirmé dans la carte Vercel de l'apex |
+	| `www` | `CNAME` | Cible exacte affichée dans la carte Vercel de `www.biendecider.com` |
+
+	Avant d'ajouter le CNAME `www`, supprimer tout `A`, `AAAA`, autre `CNAME` et le TXT `www` associé à l'ancienne redirection OVH (la capture montrait `3|welcome`) : un CNAME ne peut coexister avec aucun autre type d'enregistrement au même nom. Désactiver également toute redirection HTTP OVH encore configurée pour l'apex ou `www`; faire la redirection `biendecider.com` vers `www.biendecider.com` dans **Vercel > Settings > Domains**. Si le TXT `@` `1|www.biendecider.com` est toujours présent et correspond à cette ancienne redirection OVH, le retirer également.
+5. Ne pas réinitialiser la zone et ne pas changer les serveurs DNS OVH (`dns111.ovh.net` / `ns111.ovh.net`). **Conserver tous les MX et les TXT email SPF, DKIM et DMARC**, ainsi que les autres enregistrements non liés au web. Ne pas supprimer un TXT sans vérifier son usage.
+6. Enregistrer/publier la zone dans OVH. Attendre la propagation, puis vérifier que les deux serveurs autoritaires OVH et `1.1.1.1`/`8.8.8.8` renvoient les nouvelles valeurs. Dans Vercel, attendre **Valid Configuration** et l'émission du certificat HTTPS. Tester enfin `https://www.biendecider.com`, `https://biendecider.com` et une URL avec chemin ; aucun contournement en désactivant la validation TLS.
 
 Vercel gère le certificat et HTTPS. Aucun transfert du domaine hors OVH ni nouvel hébergement OVH n'est nécessaire. Ne pas imposer dans Next.js de redirection globale vers la production : le local et les previews Vercel doivent continuer à fonctionner.
 

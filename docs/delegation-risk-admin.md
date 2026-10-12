@@ -30,15 +30,15 @@ Les contrôles généraux `/admin` restent ouverts par défaut au prototype hist
 
 Ne pas ouvrir ce réglage à tous les comptes connectés.
 
-## Créer la table avant le premier enregistrement
+## État de la migration
 
-Le schéma ajoute `DelegationRiskSetting`. Le workflow CI ne touche jamais à la base. Avant d'utiliser le formulaire sur la base prototype :
+`DelegationRiskSetting` est présente dans le schéma versionné et sa migration a été appliquée à la base prototype le 2026-10-11. Le baseline `0_init` y a été enregistré puis `migrate deploy` a créé la table et son index unique ; le diff final a indiqué qu'aucune différence ne restait. **Ne pas utiliser `prisma db push` et ne pas relancer `migrate resolve --applied 0_init`.**
 
-1. Vérifier le déploiement et faire une sauvegarde de la base depuis son fournisseur.
-2. Dans un terminal privé, sélectionner explicitement l'URL de **la base prototype voulue** comme `DATABASE_URL`. Ne pas coller cette URL dans GitHub, une PR ou un chat.
-3. Lancer `npx prisma db push` depuis la révision publiée. Vérifier le nom de base et les changements proposés par Prisma avant confirmation. Cette modification est additive, mais reste une écriture du schéma partagé.
-4. Recharger `/admin`. Avant création de la table, le panneau explique que le schéma doit être mis à jour et aucune politique n'est écrite.
-5. Choisir les niveaux, recharger la page pour vérifier leur persistance, puis ouvrir une proposition comme utilisateur pour vérifier le niveau effectif affiché.
+La sauvegarde automatique n'était pas disponible sur le forfait de base ; le propriétaire a choisi d'accepter ce risque pour l'opération initiale. Avant une prochaine migration destructive, obtenir une vraie sauvegarde ou décider explicitement de ne pas poursuivre.
+
+Pour vérifier l'état actuel sans modification, utiliser depuis une révision à jour `npx prisma migrate status` puis `npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code`. La `DATABASE_URL` doit rester dans le terminal privé, jamais dans GitHub ou le chat.
+
+Recharger `/admin/risques`, enregistrer un niveau permis avec un compte listé dans `ADMIN_EMAILS`, recharger pour confirmer la persistance, puis ouvrir une proposition comme utilisateur pour vérifier le niveau effectif. La table manquante ne doit plus être traitée par `db push`.
 
 Le lecteur de risque se replie sur les règles déterministes s'il ne peut pas lire la table. La mutation admin, elle, ne prétend pas réussir si la table manque.
 
