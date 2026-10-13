@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCompany } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { encryptLinkedInAccount, exchangeLinkedInCode, hashLinkedInState, LINKEDIN_CALLBACK, LINKEDIN_STATE_COOKIE } from "@/lib/oauth/linkedin";
+import { encryptLinkedInAccount, exchangeLinkedInCode, hashLinkedInState, LinkedInOAuthError, LINKEDIN_CALLBACK, LINKEDIN_STATE_COOKIE } from "@/lib/oauth/linkedin";
 
 export async function GET(request: NextRequest) {
   const store = await cookies();
@@ -41,8 +41,8 @@ export async function GET(request: NextRequest) {
       return true;
     });
     return accepted ? NextResponse.redirect(new URL("/connexions?connected=linkedin", request.url)) : fail("linkedin_state");
-  } catch {
+  } catch (error) {
     await prisma.linkedInAuthorization.deleteMany({ where: { stateHash: hashLinkedInState(state), companyId: company.id } }).catch(() => {});
-    return fail("linkedin_exchange");
+    return fail(error instanceof LinkedInOAuthError ? error.diagnostic : "linkedin_storage");
   }
 }

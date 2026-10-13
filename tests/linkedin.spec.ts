@@ -52,7 +52,11 @@ test("LinkedIn OIDC rejects signature, issuer, audience, nonce and expiry mismat
     .setAudience("ci-linkedin-client").setSubject("member-test").setIssuedAt().setExpirationTime("5m").sign(privateKey);
   const valid = await sign();
   expect(await verifyLinkedInIdentity(valid, "test-nonce", keys)).toBe("member-test");
-  await expect(verifyLinkedInIdentity(valid, "wrong-nonce", keys)).rejects.toThrow();
+  await expect(verifyLinkedInIdentity(valid, "wrong-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_identity_nonce" });
+  const withoutNonce = await new SignJWT({}).setProtectedHeader({ alg: "RS256", kid: "test-key" })
+    .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
+    .setIssuedAt().setExpirationTime("5m").sign(privateKey);
+  await expect(verifyLinkedInIdentity(withoutNonce, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_identity_nonce" });
   const expired = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
     .setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) - 60).sign(privateKey);
@@ -99,10 +103,36 @@ test("LinkedIn exchange accepts verified identity without email and rejects inco
     expect(result.account).toEqual(account);
     expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
     scope = "openid profile";
-    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toThrow("Permissions LinkedIn incomplètes");
+    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_scope" });
     scope = LINKEDIN_SCOPES.join(" ");
     subject = "another-member";
-    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toThrow("Identité LinkedIn incohérente");
+    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_profile_subject" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("LinkedIn exchange diagnostics never disclose provider responses or tokens", async () => {
+  const originalFetch = globalThis.fetch;
+  const privateMarker = "private-code-token-secret";
+  const scenarios = [
+    { response: () => new Response(privateMarker, { status: 401 }), diagnostic: "linkedin_token_request" },
+    { response: () => new Response(privateMarker, { status: 200 }), diagnostic: "linkedin_token_response" },
+    { response: () => Response.json({ access_token: privateMarker, id_token: privateMarker, expires_in: 3600 }), diagnostic: "linkedin_token_response" },
+    { response: () => { throw new Error(privateMarker); }, diagnostic: "linkedin_token_request" },
+  ];
+  try {
+    for (const scenario of scenarios) {
+      globalThis.fetch = async () => scenario.response();
+      let failure: unknown;
+      try {
+        await exchangeLinkedInCode(privateMarker, "https://example.invalid/callback", "nonce");
+      } catch (caught) {
+        failure = caught;
+      }
+      expect(failure).toMatchObject({ diagnostic: scenario.diagnostic });
+      expect(String(failure)).not.toContain(privateMarker);
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
