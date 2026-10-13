@@ -23,6 +23,7 @@ test("LinkedIn auth requests only profile scopes and no client secret", () => {
   expect(url.searchParams.get("redirect_uri")).toBe(callback);
   expect(url.searchParams.get("state")).toBe("test-state");
   expect(url.searchParams.get("nonce")).toBe("test-nonce");
+  expect(url.searchParams.get("enable_extended_login")).toBe("true");
   expect(url.searchParams.get("scope")?.split(" ")).toEqual(LINKEDIN_SCOPES);
   expect(url.toString()).not.toContain("ci-linkedin-secret");
   expect(url.toString()).not.toContain("organization");
