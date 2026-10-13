@@ -55,6 +55,19 @@ model Company {
   usageEvents     UsageEvent[]
   leads           Lead[]
   uncoveredRequests UncoveredRequest[]
+  linkedinAuthorizations LinkedInAuthorization[]
+}
+
+model LinkedInAuthorization {
+  stateHash   String   @id
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sessionHash String
+  nonce       String
+  redirectUri String
+  expiresAt   DateTime
+
+  @@index([expiresAt])
 }
 
 /**
