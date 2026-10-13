@@ -47,23 +47,23 @@ test("LinkedIn OIDC rejects signature, issuer, audience, nonce and expiry mismat
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const keys = createLocalJWKSet({ keys: [{ ...await exportJWK(publicKey), kid: "test-key", alg: "RS256" }] });
   const sign = (claims: Record<string, unknown> = {}) => new SignJWT({ nonce: "test-nonce", ...claims })
-    .setProtectedHeader({ alg: "RS256", kid: "test-key" }).setIssuer("https://www.linkedin.com")
+    .setProtectedHeader({ alg: "RS256", kid: "test-key" }).setIssuer("https://www.linkedin.com/oauth")
     .setAudience("ci-linkedin-client").setSubject("member-test").setIssuedAt().setExpirationTime("5m").sign(privateKey);
   const valid = await sign();
   expect(await verifyLinkedInIdentity(valid, "test-nonce", keys)).toBe("member-test");
   await expect(verifyLinkedInIdentity(valid, "wrong-nonce", keys)).rejects.toThrow();
   const expired = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
-    .setIssuer("https://www.linkedin.com").setAudience("ci-linkedin-client").setSubject("member-test")
+    .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
     .setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) - 60).sign(privateKey);
   await expect(verifyLinkedInIdentity(expired, "test-nonce", keys)).rejects.toThrow();
-  for (const [issuer, audience] of [["https://attacker.invalid", "ci-linkedin-client"], ["https://www.linkedin.com", "other-client"]]) {
+  for (const [issuer, audience] of [["https://attacker.invalid", "ci-linkedin-client"], ["https://www.linkedin.com", "ci-linkedin-client"], ["https://www.linkedin.com/oauth", "other-client"]]) {
     const token = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
       .setIssuer(issuer).setAudience(audience).setSubject("member-test").setIssuedAt().setExpirationTime("5m").sign(privateKey);
     await expect(verifyLinkedInIdentity(token, "test-nonce", keys)).rejects.toThrow();
   }
   const otherKeys = await generateKeyPair("RS256");
   const forged = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
-    .setIssuer("https://www.linkedin.com").setAudience("ci-linkedin-client").setSubject("member-test")
+    .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
     .setIssuedAt().setExpirationTime("5m").sign(otherKeys.privateKey);
   await expect(verifyLinkedInIdentity(forged, "test-nonce", keys)).rejects.toThrow();
 });
@@ -72,7 +72,7 @@ test("LinkedIn exchange accepts verified identity without email and rejects inco
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const keys = createLocalJWKSet({ keys: [{ ...await exportJWK(publicKey), kid: "test-key", alg: "RS256" }] });
   const idToken = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
-    .setIssuer("https://www.linkedin.com").setAudience("ci-linkedin-client").setSubject(account.subject)
+    .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject(account.subject)
     .setIssuedAt().setExpirationTime("5m").sign(privateKey);
   const originalFetch = globalThis.fetch;
   let scope = LINKEDIN_SCOPES.join(" ");
