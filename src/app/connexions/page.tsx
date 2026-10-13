@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getSessionEmail } from "@/lib/session";
 import { AppShell } from "@/components/app-shell";
 import { isGoogleOAuthConfigured } from "@/lib/oauth/google";
-import { isMetaOAuthConfigured } from "@/lib/oauth/meta";
+import { facebookConnectionView, isMetaOAuthConfigured, META_ERROR_MESSAGES } from "@/lib/oauth/meta";
+import { FacebookPanel } from "./facebook-panel";
 import { decryptGmailAccount, isGmailConfigured } from "@/lib/oauth/gmail";
 import { GmailPanel } from "./gmail-panel";
 import { LinkedInPanel } from "./linkedin-panel";
@@ -20,24 +21,6 @@ const CHANNELS = [
     missingEnvHint: "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET",
     registrationStep:
       "Obtenir l'accès Business Profile API pour le projet Google, puis configurer le client OAuth web.",
-  },
-  {
-    channel: "facebook",
-    label: "Facebook",
-    startUrl: "/api/oauth/meta/start",
-    configured: isMetaOAuthConfigured(),
-    missingEnvHint: "META_APP_ID / META_APP_SECRET",
-    registrationStep:
-      "Créer une app sur developers.facebook.com, ajouter le produit Facebook Login, et demander les permissions pages_manage_posts (App Review Meta requis).",
-  },
-  {
-    channel: "instagram",
-    label: "Instagram",
-    startUrl: "/api/oauth/meta/start",
-    configured: isMetaOAuthConfigured(),
-    missingEnvHint: "META_APP_ID / META_APP_SECRET",
-    registrationStep:
-      "Même app Meta que Facebook, avec les permissions Instagram du flux Facebook Login vérifiées (App Review Meta requis) et un compte Instagram pro lié à la Page.",
   },
 ] as const;
 
@@ -87,7 +70,9 @@ export default async function ConnexionsPage({
     linkedin_state: "Cette demande LinkedIn a expiré ou n'est pas valide. Recommencez depuis Connexions.",
     linkedin_denied: "L'autorisation LinkedIn a été annulée. Votre connexion précédente, si elle existe, est conservée.",
     linkedin_exchange: "Impossible de vérifier l'identité et les permissions LinkedIn. Recommencez l'autorisation.",
+    ...META_ERROR_MESSAGES,
   };
+  const facebookView = facebookConnectionView(byChannel.get("facebook"), company.id, checkedAt);
 
   return (
     <AppShell companyName={company.name}>
@@ -101,13 +86,13 @@ export default async function ConnexionsPage({
         </p>
         <p className="mt-3 text-sm text-amber-800">
           Intégration en préparation : l&apos;autorisation OAuth ne confirme pas encore
-          l&apos;accès à une fiche Google, une Page Facebook ou un compte Instagram.
+          l&apos;accès à une fiche Google. Une Page Facebook connectée est vérifiée auprès de Facebook.
           La publication sur ces plateformes n&apos;est pas disponible.
         </p>
 
         {connected && (
           <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-700">
-            {connected === "gmail" ? "Gmail autorisé pour l'envoi manuel." : connected === "linkedin" ? "Profil LinkedIn autorisé. Aucune publication n'a été effectuée." : "Autorisation OAuth enregistrée. Le compte professionnel reste à vérifier."}
+            {connected === "gmail" ? "Gmail autorisé pour l'envoi manuel." : connected === "linkedin" ? "Profil LinkedIn autorisé. Aucune publication n'a été effectuée." : connected === "facebook_selection" ? "Autorisation Facebook reçue. Choisissez ci-dessous la Page à connecter." : "Autorisation OAuth enregistrée. Le compte professionnel reste à vérifier."}
           </p>
         )}
         {error && (
@@ -130,6 +115,7 @@ export default async function ConnexionsPage({
           expiresAt={linkedin?.expiresAt?.toLocaleString("fr-FR", { timeZone: "Europe/Paris" }) ?? null}
           hasConnection={Boolean(linkedin)}
         />
+        <FacebookPanel configured={isMetaOAuthConfigured()} view={facebookView} />
         <ul className="mt-6 space-y-3">
           {CHANNELS.map((c) => {
             const connection = byChannel.get(c.channel);
@@ -183,7 +169,7 @@ export default async function ConnexionsPage({
 
         <p className="mt-6 text-xs text-gray-400">
           Les agents préparent leurs propositions sans accès direct à vos comptes.
-          Après validation, vous publiez vous-même sur Google, Facebook ou Instagram.
+          Après validation, vous publiez vous-même sur Google ou Facebook.
         </p>
       </div>
     </AppShell>
