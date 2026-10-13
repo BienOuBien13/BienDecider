@@ -56,7 +56,7 @@ test("LinkedIn OIDC rejects signature, issuer, audience, nonce and expiry mismat
   const withoutNonce = await new SignJWT({}).setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
     .setIssuedAt().setExpirationTime("5m").sign(privateKey);
-  await expect(verifyLinkedInIdentity(withoutNonce, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_identity_nonce" });
+  await expect(verifyLinkedInIdentity(withoutNonce, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_identity_nonce_missing" });
   const expired = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
     .setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) - 60).sign(privateKey);
