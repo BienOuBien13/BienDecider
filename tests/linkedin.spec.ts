@@ -77,11 +77,19 @@ test("LinkedIn exchange accepts verified identity without email and rejects inco
   const originalFetch = globalThis.fetch;
   let scope = LINKEDIN_SCOPES.join(" ");
   let subject = account.subject;
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     const url = String(input);
-    if (url === "https://www.linkedin.com/oauth/v2/accessToken") return Response.json({
-      access_token: account.token, expires_in: 3600, id_token: idToken, scope,
-    });
+    if (url === "https://www.linkedin.com/oauth/v2/accessToken") {
+      expect(init?.method).toBe("POST");
+      const body = new URLSearchParams(String(init?.body));
+      expect(body.get("grant_type")).toBe("authorization_code");
+      expect(body.get("client_id")).toBe("ci-linkedin-client");
+      expect(body.get("client_secret")).toBe("ci-linkedin-secret");
+      expect(body.get("code")).toBe("code");
+      expect(body.get("redirect_uri")).toBe(`https://example.invalid${LINKEDIN_CALLBACK}`);
+      expect(url).not.toContain("ci-linkedin-secret");
+      return Response.json({ access_token: account.token, expires_in: 3600, id_token: idToken, scope });
+    }
     if (url === "https://api.linkedin.com/v2/userinfo") return Response.json({ sub: subject, name: account.name });
     throw new Error("Unexpected network request");
   };
@@ -90,10 +98,10 @@ test("LinkedIn exchange accepts verified identity without email and rejects inco
     expect(result.account).toEqual(account);
     expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
     scope = "openid profile";
-    await expect(exchangeLinkedInCode("code", "https://example.invalid", "test-nonce", keys)).rejects.toThrow();
+    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toThrow("Permissions LinkedIn incomplètes");
     scope = LINKEDIN_SCOPES.join(" ");
     subject = "another-member";
-    await expect(exchangeLinkedInCode("code", "https://example.invalid", "test-nonce", keys)).rejects.toThrow();
+    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toThrow("Identité LinkedIn incohérente");
   } finally {
     globalThis.fetch = originalFetch;
   }
