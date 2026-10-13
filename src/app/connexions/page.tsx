@@ -6,6 +6,8 @@ import { isGoogleOAuthConfigured } from "@/lib/oauth/google";
 import { isMetaOAuthConfigured } from "@/lib/oauth/meta";
 import { decryptGmailAccount, isGmailConfigured } from "@/lib/oauth/gmail";
 import { GmailPanel } from "./gmail-panel";
+import { LinkedInPanel } from "./linkedin-panel";
+import { decryptLinkedInAccount, isLinkedInConfigured } from "@/lib/oauth/linkedin";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +68,25 @@ export default async function ConnexionsPage({
 
   const { connections: existing, checkedAt, gmailEmail } = await getConnectionSnapshot(company.id);
   const byChannel = new Map(existing.map((c) => [c.channel, c]));
+  const linkedin = byChannel.get("linkedin");
+  let linkedinName: string | null = null;
+  let linkedinStatus: "authorized" | "expired" | "error" | "disconnected" = "disconnected";
+  if (linkedin) {
+    try {
+      if (linkedin.status !== "connecte" || !linkedin.accessToken || !linkedin.expiresAt) throw new Error("Autorisation incomplète.");
+      linkedinName = decryptLinkedInAccount(linkedin.accessToken, company.id).name;
+      linkedinStatus = linkedin.expiresAt.getTime() <= checkedAt ? "expired" : "authorized";
+    } catch {
+      linkedinStatus = "error";
+    }
+  }
+  const linkedInErrors: Record<string, string> = {
+    linkedin_config: "LinkedIn n'est pas encore configuré sur ce déploiement.",
+    linkedin_start: "Impossible de démarrer la connexion LinkedIn. Réessayez.",
+    linkedin_state: "Cette demande LinkedIn a expiré ou n'est pas valide. Recommencez depuis Connexions.",
+    linkedin_denied: "L'autorisation LinkedIn a été annulée. Votre connexion précédente, si elle existe, est conservée.",
+    linkedin_exchange: "Impossible de vérifier l'identité et les permissions LinkedIn. Recommencez l'autorisation.",
+  };
 
   return (
     <AppShell companyName={company.name}>
@@ -73,9 +94,9 @@ export default async function ConnexionsPage({
         <h1 className="text-2xl font-semibold">Connexions</h1>
         <p className="mt-2 text-sm text-gray-600">
           Autorisez BienDecider à accéder à vos comptes via <strong>OAuth</strong>{" "}
-          depuis l&apos;écran officiel de Google ou Meta — vous ne saisissez
+          depuis l&apos;écran officiel de Google, Meta ou LinkedIn — vous ne saisissez
           jamais votre mot de passe ici, et vous pouvez révoquer l&apos;accès
-          à tout moment depuis votre compte Google/Meta.
+          à tout moment depuis votre compte fournisseur.
         </p>
         <p className="mt-3 text-sm text-amber-800">
           Intégration en préparation : l&apos;autorisation OAuth ne confirme pas encore
@@ -85,12 +106,12 @@ export default async function ConnexionsPage({
 
         {connected && (
           <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-700">
-            {connected === "gmail" ? "Gmail autorisé pour l'envoi manuel." : "Autorisation OAuth enregistrée. Le compte professionnel reste à vérifier."}
+            {connected === "gmail" ? "Gmail autorisé pour l'envoi manuel." : connected === "linkedin" ? "Profil LinkedIn autorisé. Aucune publication n'a été effectuée." : "Autorisation OAuth enregistrée. Le compte professionnel reste à vérifier."}
           </p>
         )}
         {error && (
           <p role="alert" className="mt-4 rounded bg-red-50 p-3 text-sm text-red-700">
-            La connexion a échoué ({error}). Réessayez ou contactez le support.
+            {linkedInErrors[error] ?? "La connexion a échoué. Réessayez ou contactez le support."}
           </p>
         )}
 
@@ -101,6 +122,13 @@ export default async function ConnexionsPage({
           senderEmail={gmailEmail}
         />
 
+        <LinkedInPanel
+          configured={isLinkedInConfigured()}
+          status={linkedinStatus}
+          name={linkedinName}
+          expiresAt={linkedin?.expiresAt?.toLocaleString("fr-FR", { timeZone: "Europe/Paris" }) ?? null}
+          hasConnection={Boolean(linkedin)}
+        />
         <ul className="mt-6 space-y-3">
           {CHANNELS.map((c) => {
             const connection = byChannel.get(c.channel);
