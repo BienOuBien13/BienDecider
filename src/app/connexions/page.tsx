@@ -7,7 +7,7 @@ import { isMetaOAuthConfigured } from "@/lib/oauth/meta";
 import { decryptGmailAccount, isGmailConfigured } from "@/lib/oauth/gmail";
 import { GmailPanel } from "./gmail-panel";
 import { LinkedInPanel } from "./linkedin-panel";
-import { decryptLinkedInAccount, isLinkedInConfigured } from "@/lib/oauth/linkedin";
+import { decryptLinkedInAccount, isLinkedInConfigured, LINKEDIN_ERROR_MESSAGES } from "@/lib/oauth/linkedin";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +81,7 @@ export default async function ConnexionsPage({
     }
   }
   const linkedInErrors: Record<string, string> = {
+    ...LINKEDIN_ERROR_MESSAGES,
     linkedin_config: "LinkedIn n'est pas encore configuré sur ce déploiement.",
     linkedin_start: "Impossible de démarrer la connexion LinkedIn. Réessayez.",
     linkedin_state: "Cette demande LinkedIn a expiré ou n'est pas valide. Recommencez depuis Connexions.",
