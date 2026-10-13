@@ -16,6 +16,7 @@ export const LINKEDIN_ERROR_MESSAGES = {
   linkedin_scope: "Les permissions LinkedIn accordées sont incomplètes. Vérifiez openid, profile et w_member_social dans Auth.",
   linkedin_identity: "La signature ou les informations du jeton d'identité LinkedIn n'ont pas pu être vérifiées.",
   linkedin_identity_nonce: "LinkedIn n'a pas renvoyé le nonce attendu dans son jeton d'identité.",
+  linkedin_identity_nonce_missing: "Le jeton d'identité signé par LinkedIn ne contient pas de nonce. L'autorisation est refusée pour éviter une réutilisation de jeton.",
   linkedin_identity_issuer: "L'émetteur du jeton LinkedIn ne correspond pas à la configuration OIDC.",
   linkedin_identity_audience: "Le jeton LinkedIn est destiné à une autre application OAuth.",
   linkedin_identity_time: "Le jeton d'identité LinkedIn est expiré ou sa date n'est pas valide. Recommencez l'autorisation.",
@@ -98,9 +99,10 @@ export async function verifyLinkedInIdentity(idToken: string, nonce: string, key
   try {
     const { payload } = await jwtVerify(idToken, keys, {
       issuer, audience: process.env.LINKEDIN_CLIENT_ID, algorithms: ["RS256"],
-      requiredClaims: ["iss", "aud", "exp", "iat", "sub", "nonce"],
+      requiredClaims: ["iss", "aud", "exp", "iat", "sub"],
       maxTokenAge: "10m", clockTolerance: 5,
     });
+    if (payload.nonce === undefined) throw new LinkedInOAuthError("linkedin_identity_nonce_missing");
     if (payload.nonce !== nonce) throw new LinkedInOAuthError("linkedin_identity_nonce");
     if (!payload.sub) throw new LinkedInOAuthError("linkedin_identity");
     return payload.sub;
