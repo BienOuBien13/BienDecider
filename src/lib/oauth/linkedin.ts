@@ -5,8 +5,9 @@ import { z } from "zod";
 export const LINKEDIN_CALLBACK = "/api/oauth/linkedin/callback";
 export const LINKEDIN_SCOPES = ["openid", "profile", "w_member_social"] as const;
 export const LINKEDIN_STATE_COOKIE = "biendecider_linkedin_oauth";
-const issuer = "https://www.linkedin.com";
-const signingKeys = createRemoteJWKSet(new URL(`${issuer}/oauth/openid/jwks`), { timeoutDuration: 10000 });
+const oauthOrigin = "https://www.linkedin.com";
+const issuer = "https://www.linkedin.com/oauth";
+const signingKeys = createRemoteJWKSet(new URL(`${oauthOrigin}/oauth/openid/jwks`), { timeoutDuration: 10000 });
 
 export const linkedInAccountSchema = z.object({
   token: z.string().min(1).max(10000),
@@ -56,7 +57,7 @@ export function buildLinkedInAuthUrl(redirectUri: string, state: string, nonce: 
     response_type: "code", client_id: process.env.LINKEDIN_CLIENT_ID!, redirect_uri: redirectUri,
     state, nonce, scope: LINKEDIN_SCOPES.join(" "),
   });
-  return `${issuer}/oauth/v2/authorization?${params}`;
+  return `${oauthOrigin}/oauth/v2/authorization?${params}`;
 }
 
 export async function verifyLinkedInIdentity(idToken: string, nonce: string, keys: JWTVerifyGetKey = signingKeys) {
@@ -79,7 +80,7 @@ const tokenSchema = z.object({
 
 export async function exchangeLinkedInCode(code: string, redirectUri: string, nonce: string, keys: JWTVerifyGetKey = signingKeys) {
   if (!isLinkedInConfigured()) throw new Error("LinkedIn non configuré.");
-  const response = await fetch(`${issuer}/oauth/v2/accessToken`, {
+  const response = await fetch(`${oauthOrigin}/oauth/v2/accessToken`, {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri,
       client_id: process.env.LINKEDIN_CLIENT_ID!, client_secret: process.env.LINKEDIN_CLIENT_SECRET! }),
