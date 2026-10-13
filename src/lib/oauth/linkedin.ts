@@ -56,6 +56,7 @@ export function buildLinkedInAuthUrl(redirectUri: string, state: string, nonce: 
   const params = new URLSearchParams({
     response_type: "code", client_id: process.env.LINKEDIN_CLIENT_ID!, redirect_uri: redirectUri,
     state, nonce, scope: LINKEDIN_SCOPES.join(" "),
+    enable_extended_login: "true",
   });
   return `${oauthOrigin}/oauth/v2/authorization?${params}`;
 }
