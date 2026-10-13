@@ -88,9 +88,10 @@ export function buildLinkedInAuthUrl(redirectUri: string, state: string, nonce: 
   if (!isLinkedInConfigured()) throw new Error("LinkedIn non configuré.");
   const params = new URLSearchParams({
     response_type: "code", client_id: process.env.LINKEDIN_CLIENT_ID!, redirect_uri: redirectUri,
-    state, nonce, scope: LINKEDIN_SCOPES.join(" "),
+    state, scope: LINKEDIN_SCOPES.join(" "),
     enable_extended_login: "true",
   });
+  if (nonce) params.set("nonce", nonce);
   return `${oauthOrigin}/oauth/v2/authorization?${params}`;
 }
 
@@ -102,8 +103,8 @@ export async function verifyLinkedInIdentity(idToken: string, nonce: string, key
       requiredClaims: ["iss", "aud", "exp", "iat", "sub"],
       maxTokenAge: "10m", clockTolerance: 5,
     });
-    if (payload.nonce === undefined) throw new LinkedInOAuthError("linkedin_identity_nonce_missing");
-    if (payload.nonce !== nonce) throw new LinkedInOAuthError("linkedin_identity_nonce");
+    if (nonce && payload.nonce === undefined) throw new LinkedInOAuthError("linkedin_identity_nonce_missing");
+    if ((nonce && payload.nonce !== nonce) || (!nonce && payload.nonce !== undefined)) throw new LinkedInOAuthError("linkedin_identity_nonce");
     if (!payload.sub) throw new LinkedInOAuthError("linkedin_identity");
     return payload.sub;
   } catch (error) {
