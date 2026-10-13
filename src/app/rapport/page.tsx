@@ -68,7 +68,10 @@ export default async function RapportPage() {
         </section>
         <section className="border-t border-slate-200 py-6">
           <h2 className="font-medium">Dernières réalisations</h2>
-          {executed.length === 0 ? <p className="mt-3 text-sm text-slate-500">Aucune publication ou exécution enregistrée.</p> : (
+          {executed.length === 0 ? <div role="region" className="mt-3" aria-label="Résultats à venir">
+            <p className="max-w-prose text-sm text-slate-600">Aucune publication ou exécution enregistrée. Seules les actions effectivement réalisées par BienDecider apparaissent ici ; une proposition approuvée ne compte pas comme exécutée.</p>
+            <Link href="/dashboard?view=validation" className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">Examiner les productions</Link>
+          </div> : (
             <ul className="mt-3 divide-y divide-slate-200">
               {executed.map((proposal) => <li key={proposal.id} className="py-3"><p className="text-xs text-slate-500">{PERSONAS[proposal.agent as AgentKey]?.name ?? proposal.agent}</p><h3 className="mt-1 text-sm font-medium">{proposal.title}</h3></li>)}
             </ul>

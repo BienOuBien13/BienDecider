@@ -170,6 +170,9 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
   const validationItems = proposals.filter((proposal) => needsAttention(proposal) || decidedIds.includes(proposal.id));
   const history = proposals.filter((proposal) => !needsAttention(proposal));
   const nextItem = activeItems.find((item) => item.status === "propose");
+  const needsFirstDiagnostic = initialDiagnosticCount === 0 && planItems.length === 0;
+  const emptyNextHref = needsFirstDiagnostic ? "/diagnostic" : "/dashboard?view=plan";
+  const emptyNextLabel = needsFirstDiagnostic ? "Commencer par le diagnostic" : activeItems.length > 0 ? "Voir les actions du plan" : "Revenir au plan d'action";
   const locked = busyId !== null || planLoading || chatSending;
 
   return (
@@ -194,11 +197,13 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
       <section className="mt-6 border-y border-slate-200 py-5" aria-labelledby="next-step">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prochaine étape</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
-          <h2 id="next-step" className="max-w-xl text-lg font-medium">{actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision` : nextItem ? nextItem.title : "Préparer les prochaines actions"}</h2>
+          <h2 id="next-step" className="max-w-xl text-lg font-medium">{actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision` : nextItem ? nextItem.title : needsFirstDiagnostic ? "Repérer les premières opportunités" : "Préparer les prochaines actions"}</h2>
           {actionable.length > 0 ? (
             <Link href="/dashboard?view=validation" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Examiner les productions</Link>
           ) : nextItem ? (
             <button onClick={() => handleLaunch(nextItem)} disabled={locked} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50">{busyId === nextItem.id ? "En préparation…" : "Lancer l'action"}</button>
+          ) : needsFirstDiagnostic ? (
+            <Link href="/diagnostic" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Commencer par le diagnostic</Link>
           ) : (
             <button onClick={handleGeneratePlan} disabled={locked} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50">{planLoading ? "Paul réfléchit…" : "Préparer le plan"}</button>
           )}
@@ -221,9 +226,13 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
         <section id="plan-actions" className="py-5" aria-label="Plan d'action">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-medium">Priorités de {PERSONAS.co_ceo.name}</h2>
-            <button onClick={handleGeneratePlan} disabled={locked} className="text-sm font-medium text-indigo-600 underline underline-offset-4 disabled:opacity-50">{planLoading ? "Préparation…" : "Compléter le plan"}</button>
+            {!needsFirstDiagnostic && <button onClick={handleGeneratePlan} disabled={locked} className="text-sm font-medium text-indigo-600 underline underline-offset-4 disabled:opacity-50">{planLoading ? "Préparation…" : "Compléter le plan"}</button>}
           </div>
-          {activeItems.length === 0 && <p className="py-6 text-sm text-slate-500">Aucune action à lancer pour le moment.</p>}
+          {activeItems.length === 0 && <div className="py-6" aria-label="Plan à préparer">
+            <h3 className="text-base font-medium">Choisir les prochaines activités à confier</h3>
+            <p className="mt-2 max-w-prose text-sm text-slate-600">Aucune action à lancer pour le moment. Le plan rassemble les priorités proposées par Paul ; vous choisissez celles à confier à l&apos;équipe.</p>
+            {needsFirstDiagnostic ? <Link href="/diagnostic" className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">Commencer par le diagnostic</Link> : <p className="mt-3 text-sm text-slate-500">Préparez le plan avec Paul pour obtenir de nouvelles propositions. Aucune action externe ne sera exécutée à cette étape.</p>}
+          </div>}
           <ol className="divide-y divide-slate-200">
             {activeItems.map((item, index) => {
               const persona = PERSONAS[item.agent as AgentKey];
@@ -262,7 +271,11 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
       )}
       {initialView === "validation" && (
         <section className="space-y-4 py-5" aria-label="Productions à valider">
-          {validationItems.length === 0 && <p className="py-6 text-sm text-slate-500">Tout est à jour. Aucune production à valider ou à publier.</p>}
+          {validationItems.length === 0 && <div className="py-6" aria-label="Validation à venir">
+            <h2 className="text-base font-medium">Tout est à jour.</h2>
+            <p className="mt-2 max-w-prose text-sm text-slate-600">Aucune production à valider ou à publier. Les brouillons de l&apos;équipe apparaissent ici pour être relus, corrigés ou refusés avant toute action externe.</p>
+            <Link href={emptyNextHref} className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">{emptyNextLabel}</Link>
+          </div>}
           {validationItems.map((proposal) => (
             <div key={proposal.id}>
               <p className="mb-2 text-xs text-slate-500">{planItems.find((item) => item.id === proposal.planItemId)?.title ?? "Demande ponctuelle à l'équipe"}</p>
@@ -274,9 +287,13 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
       {initialView === "historique" && (
         <section className="space-y-4 py-5" aria-label="Historique">
           <h2 className="font-medium">Productions traitées</h2>
-          {history.length === 0 && <p className="text-sm text-slate-500">Aucune production traitée.</p>}
+          {history.length === 0 && <div role="region" aria-label="Historique à venir">
+            <p className="text-sm text-slate-600">Aucune production traitée. Vos validations et refus resteront ici pour retrouver vos décisions.</p>
+            <Link href={actionable.length > 0 ? "/dashboard?view=validation" : emptyNextHref} className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">{actionable.length > 0 ? "Examiner les productions" : emptyNextLabel}</Link>
+          </div>}
           {history.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} busy={locked} showAgent riskSettings={riskSettings} />)}
           <h2 className="pt-4 font-medium">Actions terminées et écartées</h2>
+          {closedItems.length === 0 && <p className="text-sm text-slate-500">Les actions terminées ou écartées du plan seront conservées ici.</p>}
           <ul className="divide-y divide-slate-200">
             {closedItems.map((item) => <li key={item.id} className="py-3 text-sm"><span className="text-xs text-slate-500">{item.status === "ecarte" ? "Écartée" : "Traitée"}</span><p className="font-medium">{item.title}</p>{item.feedback && <p className="mt-1 text-slate-500">{item.feedback}</p>}</li>)}
           </ul>
