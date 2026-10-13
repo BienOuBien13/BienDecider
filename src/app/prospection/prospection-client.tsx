@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { Lead } from "@prisma/client";
 import { PERSONAS } from "@/lib/agents/personas";
 import { countLeads, MIN_CONTACTS_TO_CONCLUDE, type LeadStage } from "@/lib/funnel-shared";
@@ -181,11 +182,14 @@ export function ProspectionClient({
       {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
       {leads.length === 0 ? (
-        <p className="mt-8 rounded-lg border border-dashed p-4 text-sm text-slate-500">
-          Aucun prospect validé pour l&apos;instant. Décrivez votre cible à Paul (ex : « les restaurants de Maurepas ») ou lancez{" "}
-          {PERSONAS.demarchage.name} depuis l&apos;Équipe : il proposera des organisations, vous validerez celles à contacter dans
-          « Aujourd&apos;hui ».
-        </p>
+        <div role="region" className="mt-8 border-t border-slate-200 py-5" aria-label="Prospection à préparer">
+          <h2 className="text-base font-medium">Choisir les organisations à contacter</h2>
+          <p className="mt-2 max-w-prose text-sm text-slate-600">Aucun prospect validé pour l&apos;instant. {PERSONAS.demarchage.name} prépare des propositions ; vous choisissez les organisations à contacter. Les contacts retenus apparaîtront ici pour suivre les échanges et les rendez-vous.</p>
+          <div className="mt-3 flex flex-wrap gap-4">
+            <Link href="/dashboard?view=validation" className="text-sm font-medium text-indigo-600 underline">Examiner les prospects proposés</Link>
+            <Link href="/equipe" className="text-sm text-indigo-600 underline">Confier une recherche à {PERSONAS.demarchage.name}</Link>
+          </div>
+        </div>
       ) : (
         ORDER.filter((stage) => leads.some((l) => l.stage === stage)).map((stage) => (
           <section key={stage} className="mt-6">

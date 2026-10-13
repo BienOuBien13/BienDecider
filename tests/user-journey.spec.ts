@@ -42,6 +42,54 @@ const test = base.extend<{ company: Company }>({
   },
 });
 
+test("empty screens guide the next activity without automatically starting agents", async ({ page, company }, testInfo) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const externalStarts: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (request.method() === "POST" && (/^\/api\/agents\//.test(path) || path === "/api/co-ceo/plan")) externalStarts.push(path);
+  });
+  try {
+    await page.goto(`${baseURL}/dashboard?view=plan`);
+    const plan = page.getByRole("region", { name: "Plan d'action", exact: true });
+    await expect(plan.getByRole("heading", { name: "Choisir les prochaines activités à confier" })).toBeVisible();
+    await expect(plan.getByRole("link", { name: "Commencer par le diagnostic" })).toHaveAttribute("href", "/diagnostic");
+    await expect(plan.getByRole("button", { name: "Compléter le plan" })).toHaveCount(0);
+    await plan.getByRole("link", { name: "Commencer par le diagnostic" }).click();
+    await expect(page.getByRole("heading", { name: "Repérer les premières opportunités" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Lancer le diagnostic" })).toBeEnabled();
+    await expect(page.getByRole("link", { name: "Passer au plan d'action" })).toHaveCount(0);
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const validation = page.getByRole("region", { name: "Productions à valider" });
+    await expect(validation.getByRole("link", { name: "Commencer par le diagnostic" })).toHaveAttribute("href", "/diagnostic");
+    await page.goto(`${baseURL}/dashboard?view=historique`);
+    await expect(page.getByRole("region", { name: "Historique à venir" }).getByRole("link", { name: "Commencer par le diagnostic" })).toHaveAttribute("href", "/diagnostic");
+    await page.goto(`${baseURL}/prospection`);
+    const prospects = page.getByRole("region", { name: "Prospection à préparer" });
+    await expect(prospects.getByRole("link", { name: "Examiner les prospects proposés" })).toHaveAttribute("href", "/dashboard?view=validation");
+    await expect(prospects.getByRole("link", { name: "Confier une recherche à Jean-Claude" })).toHaveAttribute("href", "/equipe");
+    await page.goto(`${baseURL}/rapport`);
+    await expect(page.getByRole("region", { name: "Résultats à venir" }).getByRole("link", { name: "Examiner les productions" })).toHaveAttribute("href", "/dashboard?view=validation");
+
+    await prisma.auditFinding.create({ data: { companyId: company.id, category: "site_web", title: "Premier constat", content: "Une piste à examiner" } });
+    await page.goto(`${baseURL}/dashboard?view=plan`);
+    await expect(plan.getByRole("button", { name: "Compléter le plan" })).toBeEnabled();
+    await expect(plan.getByText("Aucune action externe ne sera exécutée à cette étape.", { exact: false })).toBeVisible();
+    await prisma.actionPlanItem.create({ data: { companyId: company.id, agent: "contenu", title: "Préparer une présentation", rationale: "Clarifier l'offre", timing: "Cette semaine" } });
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    await expect(validation.getByRole("link", { name: "Voir les actions du plan" })).toHaveAttribute("href", "/dashboard?view=plan");
+    for (const width of [1440, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(validation.getByRole("heading", { name: "Tout est à jour.", exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`empty-validation-${width}.png`), fullPage: true });
+    }
+    expect(externalStarts).toEqual([]);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 test("Gmail compose requires confirmation and handles uncertain sends", async ({ page, company }, testInfo) => {
   test.skip(process.env.GMAIL_UI_TEST !== "1", "Requires the isolated Gmail UI test server with dummy credentials.");
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
