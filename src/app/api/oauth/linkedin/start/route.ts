@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (!session) return NextResponse.redirect(new URL("/login", request.url));
   try {
     const state = randomBytes(32).toString("base64url");
-    const nonce = randomBytes(32).toString("base64url");
+    const nonce = "";
     const redirectUri = new URL(LINKEDIN_CALLBACK, request.url).toString();
     await prisma.$transaction([
       prisma.linkedInAuthorization.deleteMany({ where: { OR: [{ companyId: company.id }, { expiresAt: { lte: new Date() } }] } }),

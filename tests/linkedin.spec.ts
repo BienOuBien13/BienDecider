@@ -23,6 +23,11 @@ test("LinkedIn auth requests only profile scopes and no client secret", () => {
   expect(url.searchParams.get("redirect_uri")).toBe(callback);
   expect(url.searchParams.get("state")).toBe("test-state");
   expect(url.searchParams.get("nonce")).toBe("test-nonce");
+  const codeOnlyUrl = new URL(buildLinkedInAuthUrl(callback, "test-state", ""));
+  expect(codeOnlyUrl.searchParams.has("nonce")).toBe(false);
+  expect(codeOnlyUrl.searchParams.get("response_type")).toBe("code");
+  expect(codeOnlyUrl.searchParams.get("state")).toBe("test-state");
+  expect(codeOnlyUrl.searchParams.get("redirect_uri")).toBe(callback);
   expect(url.searchParams.get("enable_extended_login")).toBe("true");
   expect(url.searchParams.get("scope")?.split(" ")).toEqual(LINKEDIN_SCOPES);
   expect(url.toString()).not.toContain("ci-linkedin-secret");
@@ -57,6 +62,8 @@ test("LinkedIn OIDC rejects signature, issuer, audience, nonce and expiry mismat
     .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
     .setIssuedAt().setExpirationTime("5m").sign(privateKey);
   await expect(verifyLinkedInIdentity(withoutNonce, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_identity_nonce_missing" });
+  expect(await verifyLinkedInIdentity(withoutNonce, "", keys)).toBe("member-test");
+  await expect(verifyLinkedInIdentity(valid, "", keys)).rejects.toMatchObject({ diagnostic: "linkedin_identity_nonce" });
   const expired = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject("member-test")
     .setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) - 60).sign(privateKey);
@@ -76,7 +83,7 @@ test("LinkedIn OIDC rejects signature, issuer, audience, nonce and expiry mismat
 test("LinkedIn exchange accepts verified identity without email and rejects incomplete scopes or account mismatch", async () => {
   const { publicKey, privateKey } = await generateKeyPair("RS256");
   const keys = createLocalJWKSet({ keys: [{ ...await exportJWK(publicKey), kid: "test-key", alg: "RS256" }] });
-  const idToken = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
+  let idToken = await new SignJWT({ nonce: "test-nonce" }).setProtectedHeader({ alg: "RS256", kid: "test-key" })
     .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject(account.subject)
     .setIssuedAt().setExpirationTime("5m").sign(privateKey);
   const originalFetch = globalThis.fetch;
@@ -102,11 +109,17 @@ test("LinkedIn exchange accepts verified identity without email and rejects inco
     const result = await exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys);
     expect(result.account).toEqual(account);
     expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    idToken = await new SignJWT({}).setProtectedHeader({ alg: "RS256", kid: "test-key" })
+      .setIssuer("https://www.linkedin.com/oauth").setAudience("ci-linkedin-client").setSubject(account.subject)
+      .setIssuedAt().setExpirationTime("5m").sign(privateKey);
+    const codeFlowResult = await exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "", keys);
+    expect(codeFlowResult.account).toEqual(account);
+    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_identity_nonce_missing" });
     scope = "openid profile";
-    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_scope" });
+    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "", keys)).rejects.toMatchObject({ diagnostic: "linkedin_scope" });
     scope = LINKEDIN_SCOPES.join(" ");
     subject = "another-member";
-    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "test-nonce", keys)).rejects.toMatchObject({ diagnostic: "linkedin_profile_subject" });
+    await expect(exchangeLinkedInCode("code", `https://example.invalid${LINKEDIN_CALLBACK}`, "", keys)).rejects.toMatchObject({ diagnostic: "linkedin_profile_subject" });
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -158,6 +171,8 @@ test("LinkedIn routes reject invalid state, preserve prior identity on cancellat
     expect(authUrl.origin).toBe("https://www.linkedin.com");
     expect(authUrl.searchParams.get("redirect_uri")).toBe(redirectUri);
     const state = authUrl.searchParams.get("state")!;
+    expect(authUrl.searchParams.has("nonce")).toBe(false);
+    expect((await prisma.linkedInAuthorization.findUniqueOrThrow({ where: { stateHash: hashLinkedInState(state) } })).nonce).toBe("");
     const callbackHeaders = { Cookie: `${headers.Cookie}; ${LINKEDIN_STATE_COOKIE}=${state}` };
     const callback = (stateValue: string, cookie = callbackHeaders.Cookie) => request.get(`${redirectUri}?state=${encodeURIComponent(stateValue)}&error=user_cancelled_authorize`, { headers: { Cookie: cookie }, maxRedirects: 0 });
     expect((await callback("wrong-state")).headers().location).toContain("linkedin_state");
