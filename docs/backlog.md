@@ -8,6 +8,26 @@ Focus actuel demandé par les fondateurs : **domaine delegation en P1** ; état 
 
 Tranche `del-5` livrée le 2026-10-10 : facteurs de risque déterministes par type, réglages globaux admin persistants avec plancher automatique, facteurs visibles, types inconnus élevés, garde serveur `Accompagner` sur site/Gmail ; aucune autonomie activée. Règles fondatrices, modes par entreprise et contrôles des autres connecteurs restent à livrer ; détail dans [domaines.md](domaines.md#tranche-del-5-livrée-le-2026-10-10).
 
+## Point d'avancement du 2026-10-14
+
+**Livré depuis le 13 octobre** (fusionné sur `main`) :
+- [#165](https://github.com/groupebienoubien/BienDecider/pull/165) : décider au téléphone d'une main, US #99 fermée.
+- [#162](https://github.com/groupebienoubien/BienDecider/pull/162) : connexion d'une Page Facebook choisie et vérifiée, jetons chiffrés. #9 reste ouverte : publication Meta et recette fournisseur non livrées.
+- [#161](https://github.com/groupebienoubien/BienDecider/pull/161) : guidance des écrans vides ; #98 reste ouverte pour le relevé.
+- [#153](https://github.com/groupebienoubien/BienDecider/pull/153) à [#160](https://github.com/groupebienoubien/BienDecider/pull/160) : connexion sécurisée du profil LinkedIn (US #148) et correctifs du callback OIDC.
+- [#163](https://github.com/groupebienoubien/BienDecider/pull/163), [#164](https://github.com/groupebienoubien/BienDecider/pull/164) : mises à jour de dépendances.
+
+**En cours** : PR [#166](https://github.com/groupebienoubien/BienDecider/pull/166) expiration et révocation des sessions (#65) ; #147 application LinkedIn ; #20 objectif en langage naturel ; #5 Gmail ; #9 Meta ; #39 risque par action. Les assignations font foi dans GitHub.
+
+**Audit UX/UI V0 du 13 octobre** : 20 constats en lecture seule (PDF de 30 pages, non versionné car il contient des captures du compte). Challenge et 25 fiches UX-01 à UX-25 dans [audit-ux-backlog.md](audit-ux-backlog.md). Arbitrage du 14 octobre et mise à jour des Issues :
+- Décisions : la vitrine est **servie directement, sans iframe**, comme le demande #45, et l'anomalie d'ancre UX-06 y est rattachée ; UX-19 devient une **Issue séparée** de #39 ; UX-22 **enrichit #155**.
+- 14 nouvelles US, toutes en `status:backlog`, sans responsable :
+  - P1 : #168 diagnostic courant (UX-01), #169 correction et provenance (UX-02), #170 examiner avant de décider (UX-03), #171 brouillon et version approuvée (UX-04), #172 publier le site prévisualisé (UX-05), #173 labels de formulaires (UX-07), #174 qui fait quoi par canal (UX-09), #175 traitement des données (UX-11), #176 décidé, réalisé, mesuré (UX-12), #179 quoi vérifier avant diffusion (UX-19).
+  - P2 : #177 file groupée par action (UX-14), #178 première décision sur mobile (UX-15), #180 prospect réellement suivi (UX-20, #46 garde Gmail).
+  - P3 : #181 navigation par tâche (UX-23), après les observations de #100.
+- 15 Issues existantes complétées par une section « Complément audit UX du 2026-10-14 » : #45 (UX-06), #155 (UX-22), #95 (UX-08), #94 et #97 (grammaire visuelle et états communs), #2 (UX-10), #78 (UX-13), #86 (UX-16), #24 (UX-17), #102, #103 et #106 (UX-18), #16 (UX-21), #107 (UX-24), #100 (UX-25). Commentaire sur #39 vers #179.
+- Les parcours que l'audit n'a pas testés (premier onboarding, confirmations de publication, envoi Gmail, retours OAuth, erreurs serveur) sont ajoutés au protocole de #100.
+
 Ce document conserve l'historique et les décisions. Les cases ci-dessous reflètent leur date de rédaction ; ne pas les maintenir en parallèle du statut des Issues. Le catalogue initial [github-backlog.json](github-backlog.json) importe uniquement les US de travail restant, sans recréer toutes les livraisons passées. Les changements de statut se font dans GitHub, l'import ne les écrase pas.
 
 Délégation prototype (décision du 2026-10-10) : fusion autonome traçable après **4 secondes** sans réponse à la demande de relecture, ou indisponibilité annoncée, pour **tous les niveaux de risque**, y compris sécurité, données, envoi externe et CI/protections. PR et CI toujours obligatoires ; relecture différée et risques documentés. Voir [ci-cd.md](ci-cd.md). Les garde-fous des actions métier et la coordination des modifications de base restent inchangés.
