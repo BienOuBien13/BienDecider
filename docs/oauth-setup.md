@@ -107,24 +107,41 @@ Source : [App Review Instagram](https://developers.facebook.com/documentation/in
 
 1. Aller sur [developers.facebook.com](https://developers.facebook.com/) → **Mes apps → Créer une app** → type "Entreprise".
 2. Ajouter le produit **Facebook Login** (sidebar → Ajouter un produit).
-3. Dans **Facebook Login → Paramètres** : ajouter l'URI de redirection `https://www.biendecider.com/api/oauth/meta/callback`. Nom public de l'app : BienDecider ; domaine : `biendecider.com` ; confidentialité : `https://www.biendecider.com/confidentialite`.
-4. Récupérer **App ID** et **App Secret** (menu Paramètres → Général), les mettre dans `.env` :
+3. Dans **Facebook Login → Paramètres** : ajouter l'URI de redirection `https://www.biendecider.com/api/oauth/meta/callback`, exactement, sans barre finale. Nom public de l'app : BienDecider ; domaine : `biendecider.com` ; confidentialité : `https://www.biendecider.com/confidentialite`.
+4. Récupérer **App ID** et **App Secret** (menu Paramètres → Général), puis générer une clé de chiffrement dédiée aux jetons Facebook :
+   ```
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+   Saisir les trois valeurs dans **Vercel > bien-decider > Settings > Environment Variables > Production**, puis redéployer :
    ```
    META_APP_ID="..."
    META_APP_SECRET="..."
+   META_TOKEN_ENCRYPTION_KEY="64 caractères hexadécimaux"
    ```
-5. **Mode développement** : tant que l'app n'est pas passée en App Review, seuls les comptes ayant un rôle sur l'app (admin, développeur, testeur — à ajouter dans Rôles de l'app) peuvent se connecter. Suffisant pour tester vous-même et avec vos 5 entreprises pilotes *si vous les ajoutez comme testeurs*.
-6. **Pour publier réellement sur Instagram/Facebook au nom d'un vrai client externe** (pas juste vous) : demander en **App Review** les permissions `pages_manage_posts` et `instagram_content_publish` (menu *Vérification de l'app → Autorisations et fonctionnalités*). Il faut fournir :
-   - Une démonstration vidéo du flux d'usage réel dans BienDecider.
+   Sans les trois, le bouton « Autoriser Facebook » n'apparaît pas. Ne jamais réutiliser la clé d'un autre connecteur. Changer cette clé rend illisibles les connexions Facebook existantes : chaque dirigeant devra réautoriser sa Page.
+5. **Mode développement** : tant que l'app n'est pas passée en App Review, seuls les comptes ayant un rôle sur l'app (admin, développeur, testeur — à ajouter dans Rôles de l'app) peuvent se connecter, et uniquement sur les Pages qu'ils gèrent. Suffisant pour tester vous-même et avec vos 5 entreprises pilotes *si vous les ajoutez comme testeurs*.
+6. **Permissions demandées par le code** (Facebook Login, Graph API v26.0, vérifiées dans la documentation Meta le 2026-10-13) : `pages_show_list` pour lister les Pages gérées, `pages_read_engagement` pour lire la Page choisie, `pages_manage_posts` pour y publier après validation. Aucune permission Instagram n'est demandée pour l'instant.
+7. **Pour ouvrir à un client externe** (un compte sans rôle sur l'app) : demander ces trois permissions en **App Review** (menu *Vérification de l'app → Autorisations et fonctionnalités*). Il faut fournir :
+   - Une démonstration vidéo du flux d'usage réel dans BienDecider, publication comprise : attendre que la publication soit livrée avant de soumettre.
    - Une politique de confidentialité publique (URL).
    - Une justification métier claire de l'usage de chaque permission.
    - Compter plusieurs jours à plusieurs semaines de délai, et un refus possible si le dossier est incomplet.
-7. Le compte Instagram du client doit être un **compte professionnel ou créateur**, lié à une Page Facebook — sinon `instagram_content_publish` échoue même une fois l'app validée.
+8. **Recette en mode développement**, avec un compte ayant un rôle sur l'app et gérant au moins une Page :
+   1. `/connexions` → **Autoriser Facebook** → dans l'écran de Facebook, choisir la ou les Pages à partager et accepter les trois permissions.
+   2. De retour sur `/connexions`, le panneau affiche « Autorisation reçue · choisissez la Page à connecter » : choisir une Page, **Connecter cette Page**. Le panneau doit afficher « Page vérifiée » et le nom de la Page.
+   3. **Déconnecter Facebook** → confirmer. Vérifier dans Facebook (Paramètres → Intégrations professionnelles) que BienDecider a disparu.
+   4. Recommencer en refusant une permission : le message « permissions incomplètes » doit s'afficher et rien ne doit être connecté.
+
+## Ce que fait le connecteur Facebook, et ce qu'il ne fait pas encore
+
+Livré : autorisation par Facebook Login avec state signé et lié à la session, vérification des permissions réellement accordées, choix explicite d'une seule Page, vérification de cette Page auprès de Meta avant de l'afficher comme connectée, jetons chiffrés au repos et liés à l'entreprise, déconnexion avec révocation chez Meta. Code : [src/lib/oauth/meta.ts](../src/lib/oauth/meta.ts), tests sans appel à Meta : `npm run test:facebook`.
+
+Pas encore livré : la **publication** d'une production validée sur la Page, **Instagram**, la détection d'une révocation faite depuis Facebook, et le changement de Page sans réautorisation. Le jeton de Page n'expire pas tant que l'autorisation tient ; le jeton utilisateur, gardé seulement pour la révocation, expire au bout d'environ 60 jours.
+
+Les anciennes lignes Facebook et Instagram enregistrées en clair par le premier flux ne sont plus lues : elles s'affichent « Autorisation à refaire » et sont effacées à la déconnexion ou remplacées à la réautorisation. Leur purge en base reste à faire avec le chiffrement des jetons Google (US #7).
 
 ## Ce que je peux faire dès que vous avez les identifiants
 
-Les variables rendent le démarrage OAuth disponible ; elles ne suffisent pas à finaliser l'intégration. Le callback Meta enregistre aujourd'hui le même jeton pour Facebook et Instagram **sans vérifier la Page ni le compte Instagram associé**. Il reste à découvrir et sélectionner les ressources de chaque entreprise, vérifier les permissions effectivement accordées, sécuriser et renouveler les jetons, gérer la révocation et implémenter l'exécution validée avant un dossier App Review.
+Pour Google Business Profile, les variables rendent le démarrage OAuth disponible mais ne suffisent pas : le jeton est encore enregistré en clair, sans vérification de la fiche, sans renouvellement ni déconnexion applicative. `/connexions` distingue autorisation enregistrée, expirée et erreur, sans prétendre confirmer une fiche. Ces limites sont des tâches prioritaires, pas des fonctionnalités livrées.
 
-Le stockage actuel des tokens est en clair dans les champs de la base (pas de chiffrement applicatif), sans renouvellement automatique ni déconnexion applicative. `/connexions` distingue maintenant autorisation enregistrée, expirée et erreur, sans prétendre confirmer une fiche ou une Page. Ces limites sont des tâches prioritaires, pas des fonctionnalités livrées.
-
-Pour les scopes Meta, vérifier le nom exact et les dépendances dans la documentation du flux choisi : le code utilise actuellement `instagram_content_publish`, alors que la documentation App Review actuelle mentionne `instagram_content_publishing`. Confirmer le contrat de la version Graph cible avant activation ; ne pas mélanger les permissions `instagram_business_*` d'Instagram Login avec Facebook Login.
+Pour Instagram, le moment venu : vérifier le nom exact des permissions dans la documentation du flux Facebook Login (la documentation App Review mentionne `instagram_content_publishing`), confirmer le contrat de la version Graph cible, et ne pas mélanger les permissions `instagram_business_*` d'Instagram Login avec Facebook Login.

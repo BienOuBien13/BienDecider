@@ -217,14 +217,14 @@ test("OAuth authorization is not advertised as a verified business connection", 
     await prisma.channelConnection.createMany({ data: [
       { companyId: company.id, channel: "google_business_profile", status: "connecte", accessToken: "test-token-never-visible", expiresAt: new Date(Date.now() - 60000) },
       { companyId: company.id, channel: "facebook", status: "connecte", accessToken: "test-token-never-visible", expiresAt: new Date(Date.now() + 3600000) },
-      { companyId: company.id, channel: "instagram", status: "erreur" },
     ] });
     for (const width of [320, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`${baseURL}/connexions`);
       await expect(page.getByText("Autorisation expirée", { exact: true })).toBeVisible();
-      await expect(page.getByText("Autorisation enregistrée · compte à vérifier", { exact: true })).toBeVisible();
-      await expect(page.getByText("Erreur d'autorisation", { exact: true })).toBeVisible();
+      // Jeton en clair de l'ancien flux Facebook : jamais présenté comme une connexion, à refaire.
+      await expect(page.getByText("Autorisation à refaire · reconnectez votre Page", { exact: true })).toBeVisible();
+      await expect(page.getByText("Page vérifiée", { exact: true })).toHaveCount(0);
       await expect(page.locator("main")).not.toContainText("test-token-never-visible");
       await expect(page.getByText("Connecté", { exact: true })).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -232,7 +232,8 @@ test("OAuth authorization is not advertised as a verified business connection", 
     }
     await prisma.channelConnection.deleteMany({ where: { companyId: company.id } });
     await page.reload();
-    await expect(page.locator("main ul").getByText("Non autorisé", { exact: true })).toHaveCount(3);
+    await expect(page.locator("main ul").getByText("Non autorisé", { exact: true })).toHaveCount(1);
+    await expect(page.getByRole("region", { name: "Facebook · Page" }).getByText("Non autorisé", { exact: true })).toBeVisible();
   } finally { await prisma.$disconnect(); }
 });
 

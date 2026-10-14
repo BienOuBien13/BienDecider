@@ -28,5 +28,6 @@
 /src/lib/outreach.ts              @RemiJolivalt @samirt-hue
 /src/lib/site/publish.ts          @RemiJolivalt @samirt-hue
 /src/app/api/gmail/               @RemiJolivalt @samirt-hue
+/src/app/api/facebook/            @RemiJolivalt @samirt-hue
 /src/app/api/proposals/           @RemiJolivalt @samirt-hue
 /src/app/api/cron/                @RemiJolivalt @samirt-hue
