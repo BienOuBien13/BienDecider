@@ -8,6 +8,23 @@ Focus actuel demandé par les fondateurs : **domaine delegation en P1** ; état 
 
 Tranche `del-5` livrée le 2026-10-10 : facteurs de risque déterministes par type, réglages globaux admin persistants avec plancher automatique, facteurs visibles, types inconnus élevés, garde serveur `Accompagner` sur site/Gmail ; aucune autonomie activée. Règles fondatrices, modes par entreprise et contrôles des autres connecteurs restent à livrer ; détail dans [domaines.md](domaines.md#tranche-del-5-livrée-le-2026-10-10).
 
+## Point d'avancement du 2026-10-14
+
+**Livré depuis le 13 octobre** (fusionné sur `main`) :
+- [#165](https://github.com/groupebienoubien/BienDecider/pull/165) : décider au téléphone d'une main, US #99 fermée.
+- [#162](https://github.com/groupebienoubien/BienDecider/pull/162) : connexion d'une Page Facebook choisie et vérifiée, jetons chiffrés. #9 reste ouverte : publication Meta et recette fournisseur non livrées.
+- [#161](https://github.com/groupebienoubien/BienDecider/pull/161) : guidance des écrans vides ; #98 reste ouverte pour le relevé.
+- [#153](https://github.com/groupebienoubien/BienDecider/pull/153) à [#160](https://github.com/groupebienoubien/BienDecider/pull/160) : connexion sécurisée du profil LinkedIn (US #148) et correctifs du callback OIDC.
+- [#163](https://github.com/groupebienoubien/BienDecider/pull/163), [#164](https://github.com/groupebienoubien/BienDecider/pull/164) : mises à jour de dépendances.
+
+**En cours** : PR [#166](https://github.com/groupebienoubien/BienDecider/pull/166) expiration et révocation des sessions (#65) ; #147 application LinkedIn ; #20 objectif en langage naturel ; #5 Gmail ; #9 Meta ; #39 risque par action. Les assignations font foi dans GitHub.
+
+**Audit UX/UI V0 du 13 octobre** : 20 constats en lecture seule (PDF de 30 pages, non versionné car il contient des captures du compte). Challenge et 25 fiches UX-01 à UX-25 dans [audit-ux-backlog.md](audit-ux-backlog.md). Rapprochement avec les Issues du 14 octobre, **en attente d'arbitrage, aucune Issue créée ni modifiée** :
+- 15 nouvelles US proposées : UX-01 à UX-07, UX-09, UX-11, UX-12, UX-14, UX-15, UX-20 (parcours manuel, #46 garde Gmail), UX-22 (tranche sans OAuth de #155), UX-23 (après tests utilisateurs).
+- 11 enrichissements d'Issues existantes : UX-08 → #95/#94, UX-10 → #2, UX-13 → #78, UX-16 → #86/#88, UX-17 → #24, UX-18 → #102/#103/#106, UX-19 → #39, UX-21 → #16, UX-24 → #107, UX-25 → #100, et grammaire visuelle de l'audit (états communs icône + texte, échelle typographique) → #94/#97.
+- Décisions à prendre : vitrine servie hors iframe comme le demande #45, ou sandbox conservée comme le recommande la fiche UX-06 ; UX-19 dans #39 (en cours) ou Issue séparée ; UX-22 séparée de #155 ou fusionnée.
+- Hors périmètre de l'audit, à couvrir par la recette UX-25 : premier onboarding, confirmations de publication, envoi Gmail, retours OAuth, erreurs serveur.
+
 Ce document conserve l'historique et les décisions. Les cases ci-dessous reflètent leur date de rédaction ; ne pas les maintenir en parallèle du statut des Issues. Le catalogue initial [github-backlog.json](github-backlog.json) importe uniquement les US de travail restant, sans recréer toutes les livraisons passées. Les changements de statut se font dans GitHub, l'import ne les écrase pas.
 
 Délégation prototype (décision du 2026-10-10) : fusion autonome traçable après **4 secondes** sans réponse à la demande de relecture, ou indisponibilité annoncée, pour **tous les niveaux de risque**, y compris sécurité, données, envoi externe et CI/protections. PR et CI toujours obligatoires ; relecture différée et risques documentés. Voir [ci-cd.md](ci-cd.md). Les garde-fous des actions métier et la coordination des modifications de base restent inchangés.
