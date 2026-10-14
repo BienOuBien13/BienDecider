@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { publishSiteFromProposal } from "@/lib/site/publish";
+import { PublishRefusedError, publishSiteFromProposal } from "@/lib/site/publish";
 import { getSessionCompany } from "@/lib/session";
 
 /**
@@ -27,11 +27,21 @@ export async function POST(
     return NextResponse.json({ error: "Proposition introuvable" }, { status: 404 });
   }
 
+  // Confirmer l'exécution d'une version précise : une ancienne page ouverte ne peut pas publier une version remplacée.
+  const body = await _request.json().catch(() => null);
+  const expectedVersion = body && typeof body === "object" ? (body as { expectedVersion?: unknown }).expectedVersion : undefined;
+  if (!Number.isInteger(expectedVersion)) {
+    return NextResponse.json({ error: "La version à publier est obligatoire." }, { status: 400 });
+  }
+
   try {
-    const { slug } = await publishSiteFromProposal(id);
+    const { slug } = await publishSiteFromProposal(id, expectedVersion as number);
     return NextResponse.json({ url: `/site/${slug}` });
   } catch (error) {
     console.error("Erreur exécution proposition:", error);
+    if (error instanceof PublishRefusedError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Échec de l'exécution";
     return NextResponse.json({ error: message }, { status: 400 });
   }

@@ -35,7 +35,14 @@ function sanitizeHtml(html: string): string {
 import { canExecuteAction } from "@/lib/delegation-risk";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 
-export async function publishSiteFromProposal(proposalId: string) {
+/** Erreur affichable telle quelle au dirigeant, avec le code HTTP à renvoyer. */
+export class PublishRefusedError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+export async function publishSiteFromProposal(proposalId: string, expectedVersion: number) {
   const proposal = await prisma.agentProposal.findUniqueOrThrow({
     where: { id: proposalId },
     include: { company: true },
@@ -44,10 +51,14 @@ export async function publishSiteFromProposal(proposalId: string) {
   if (proposal.kind !== "site_web_content") {
     throw new Error("Seule une proposition de contenu de site peut être publiée.");
   }
-  const humanApproved = ["validee", "modifiee"].includes(proposal.status);
+  // L'autorisation porte sur une version précise, pas sur le seul libellé du statut (US #171).
+  const humanApproved = ["validee", "modifiee"].includes(proposal.status) && proposal.approvedVersion === proposal.version;
+  if (humanApproved && expectedVersion !== proposal.version) {
+    throw new PublishRefusedError("La version affichée n'est plus la version approuvée. Rechargez la page avant de publier.", 409);
+  }
   const riskSettings = await getConfiguredRiskLevels();
   if (!canExecuteAction(proposal.kind, "accompagner", humanApproved, { publicExposure: true }, riskSettings[proposal.kind])) {
-    throw new Error("La proposition doit être validée par le dirigeant avant publication.");
+    throw new PublishRefusedError("Approuvez cette version du site avant de la publier.", 400);
   }
 
   const company = proposal.company;
@@ -99,21 +110,26 @@ ${proposal.content}`,
     if (taken && taken.id !== company.id) slug = `${slug}-${company.id.slice(-6)}`;
   }
 
-  await prisma.$transaction([
-    prisma.company.update({
+  const detail = `Site publié depuis la version ${proposal.version} : /site/${slug}`;
+  await prisma.$transaction(async (tx) => {
+    // Le brief a pu changer pendant la génération : on ne publie que si la version approuvée est toujours la courante.
+    const { count } = await tx.agentProposal.updateMany({
+      where: { id: proposal.id, version: proposal.version, approvedVersion: proposal.version, status: { in: ["validee", "modifiee"] } },
+      data: { status: "executee" },
+    });
+    if (count === 0) {
+      throw new PublishRefusedError("Le site a été modifié pendant la préparation. Relisez et approuvez la nouvelle version avant de publier.", 409);
+    }
+    await tx.company.update({
       where: { id: company.id },
       data: { siteSlug: slug, siteHtml: html, sitePublishedAt: new Date() },
-    }),
-    prisma.agentProposal.update({
-      where: { id: proposal.id },
-      data: { status: "executee" },
-    }),
-    prisma.executionLog.upsert({
+    });
+    await tx.executionLog.upsert({
       where: { proposalId: proposal.id },
-      create: { proposalId: proposal.id, result: "succes", detail: `Site publié : /site/${slug}` },
-      update: { result: "succes", detail: `Site republié : /site/${slug}`, executedAt: new Date() },
-    }),
-  ]);
+      create: { proposalId: proposal.id, result: "succes", detail },
+      update: { result: "succes", detail, executedAt: new Date() },
+    });
+  });
 
   return { slug };
 }

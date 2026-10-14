@@ -6,7 +6,7 @@ import type { AgentProposal, ChatMessage, ActionPlanItem } from "@prisma/client"
 import type { SafeCompany } from "@/lib/safe-company";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
-import { ProposalCard } from "@/components/proposal-card";
+import { ProposalCard, type ProposalDecision } from "@/components/proposal-card";
 import { JourneyProgress } from "@/components/journey-progress";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 
@@ -106,28 +106,36 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
     finally { setBusyId(null); }
   }
 
-  async function handleDecision(proposalId: string, status: "validee" | "modifiee" | "rejetee", content?: string, rejectionReason?: string): Promise<boolean> {
+  async function handleDecision(proposalId: string, decision: ProposalDecision): Promise<boolean> {
+    const { status, content, rejectionReason, expectedVersion } = decision;
     setBusyId(proposalId);
     setError(null);
+    setNotice(null);
     try {
-      await request(`/api/proposals/${proposalId}`, "PATCH", { status, ...(content === undefined ? {} : { content }), ...(rejectionReason === undefined ? {} : { rejectionReason }) });
-      setDecidedIds((previous) => [...previous, proposalId]);
+      await request(`/api/proposals/${proposalId}`, "PATCH", {
+        status, expectedVersion,
+        ...(content === undefined ? {} : { content }),
+        ...(rejectionReason === undefined ? {} : { rejectionReason }),
+      });
+      if (status !== "brouillon") setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
-      setNotice(status === "modifiee"
-        ? "Version modifiée enregistrée et validée. Aucune action n'a été exécutée automatiquement."
-        : status === "validee"
-          ? "Production validée. La validation ne vaut pas publication ou envoi."
-          : "Production rejetée.");
+      setNotice(status === "brouillon"
+        ? "Brouillon enregistré. Il n'est pas approuvé : rien ne sera publié ni envoyé."
+        : status === "modifiee"
+          ? "Cette version est approuvée. Aucune action n'a été exécutée automatiquement."
+          : status === "validee"
+            ? "Production validée. La validation ne vaut pas publication ou envoi."
+            : "Production rejetée.");
       return true;
     } catch (error) { reportError(error); return false; }
     finally { setBusyId(null); }
   }
 
-  async function handleExecute(proposalId: string) {
+  async function handleExecute(proposalId: string, expectedVersion: number) {
     setBusyId(proposalId);
     setError(null);
     try {
-      await request(`/api/proposals/${proposalId}/execute`, "POST");
+      await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion });
       setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
       setNotice("Site publié. La publication figure dans les résultats.");

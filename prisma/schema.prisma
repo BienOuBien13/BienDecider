@@ -189,6 +189,12 @@ model AgentProposal {
   title       String
   content     String // contenu généré, prêt à être validé/modifié
   status      String   @default("en_attente") // en_attente, validee, modifiee, rejetee, executee
+  // Chaque changement de contenu crée une version ; seule la version approuvée
+  // peut être exécutée (US #171). Un brouillon enregistré reste en_attente.
+  version         Int       @default(1)
+  approvedVersion Int? // null pour les approbations antérieures au versionnage : à reconfirmer avant exécution
+  approvedAt      DateTime?
+  draftSavedAt    DateTime?
   createdAt   DateTime @default(now())
   decidedAt   DateTime?
   rejectionReason String?
