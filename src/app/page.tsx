@@ -13,7 +13,7 @@ const EXAMPLE_PLAN = [
   { title: "Contacter 15 syndics du secteur", detail: "Liste de prospects et message de présentation préparés." },
 ];
 
-// Ce que BienDecider fait réellement aujourd'hui, par livrable (#174). À tenir à jour avec /connexions.
+// Promesse par livrable : les agents préparent, et n'agissent au nom du dirigeant que sur sa décision.
 const CAPABILITIES = [
   {
     deliverable: "Diagnostic et plan d'action",
@@ -22,18 +22,18 @@ const CAPABILITIES = [
   },
   {
     deliverable: "Site vitrine",
-    us: "Rédige le site et le publie à votre nom, une fois que vous l'avez validé.",
-    you: "Vous relisez et approuvez.",
+    us: "Rédige votre site et le publie à votre nom.",
+    you: "Vous le relisez et décidez de sa mise en ligne.",
   },
   {
-    deliverable: "Posts Facebook, Instagram, LinkedIn",
-    us: "Rédige les publications.",
-    you: "Vous les publiez vous-même. La publication par BienDecider est en préparation.",
+    deliverable: "Publications sur les réseaux",
+    us: "Rédige vos posts Facebook, Instagram, LinkedIn et Google, puis les publie pour vous.",
+    you: "Vous relisez et décidez de ce qui part.",
   },
   {
     deliverable: "Prospection",
-    us: "Repère des prospects et prépare le message d'approche.",
-    you: "Vous prenez contact et notez le résultat.",
+    us: "Repère des prospects, prépare le message d'approche et l'envoie pour vous.",
+    you: "Vous validez chaque envoi.",
   },
 ];
 
@@ -41,7 +41,7 @@ const STEPS = [
   { n: "1", title: "Vous donnez l'objectif", text: "« 10 demandes de devis par mois ». Votre métier, votre zone, votre site s'il existe. Environ 5 minutes." },
   { n: "2", title: "Paul fait le plan", text: "Votre partenaire de croissance analyse votre situation et propose quelques actions, confiées à son équipe." },
   { n: "3", title: "L'équipe prépare", text: "Site, posts, prospection : chaque agent prépare le travail concret." },
-  { n: "4", title: "Vous relisez et décidez", text: "Rien ne part sans votre accord. Selon le livrable, BienDecider le publie ou vous le remet prêt à l'emploi." },
+  { n: "4", title: "Vous relisez et décidez", text: "Rien ne part sans votre accord. Une fois votre décision prise, BienDecider publie ou envoie pour vous." },
 ];
 
 // Une seule vérification par requête, partagée par l'en-tête et le bloc principal.
@@ -165,7 +165,7 @@ export default function LandingPage() {
                   <li>la gratuité du devis</li>
                 </ul>
                 <p className="mt-3 text-sm text-slate-600">
-                  Vous modifiez si besoin, puis vous approuvez cette version. Vous la publiez ensuite sur votre Page.
+                  Vous modifiez si besoin, puis vous approuvez cette version : Camille la publie alors sur votre Page.
                 </p>
               </div>
             </div>
@@ -173,9 +173,9 @@ export default function LandingPage() {
         </section>
 
         <section className="mt-14" aria-labelledby="qui-fait-quoi">
-          <h2 id="qui-fait-quoi" className="text-xl font-semibold">Qui fait quoi, aujourd&apos;hui</h2>
+          <h2 id="qui-fait-quoi" className="text-xl font-semibold">Ce que BienDecider fait pour vous</h2>
           <p className="mt-1 text-base text-slate-600">
-            BienDecider prépare tout. Selon le livrable, il le réalise après votre accord ou vous le remet prêt à l&apos;emploi.
+            Les agents préparent tout le travail. Ils n&apos;agissent en votre nom que sur votre décision.
           </p>
           <ul className="mt-5 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white shadow-sm">
             {CAPABILITIES.map((c) => (
