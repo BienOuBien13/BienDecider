@@ -3,6 +3,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { requireLocalDatabase } from "./support/local-database";
+import { createSessionToken } from "../src/lib/session-token";
 import { buildMetaAuthUrl, createMetaState, decryptFacebookAccount, encryptFacebookAccount, exchangeMetaCode,
   facebookConnectionView, FACEBOOK_SCOPES, isMetaOAuthConfigured, META_CALLBACK, META_GRAPH_VERSION, META_STATE_COOKIE,
   MetaOAuthError, revokeFacebookAuthorization, verifyFacebookPage, verifyMetaState, type FacebookAccount } from "../src/lib/oauth/meta";
@@ -187,8 +188,8 @@ test("Facebook routes: start, refused or forged callbacks, Page choice guards an
   const profile = { name: "Atelier Test Facebook", trade: "Artisan", servingArea: "Paris" };
   const company = await prisma.company.create({ data: { ...profile, ownerEmail: `facebook-test-${randomUUID()}@example.invalid` } });
   const other = await prisma.company.create({ data: { ...profile, ownerEmail: `facebook-other-${randomUUID()}@example.invalid` } });
-  const session = (email: string) => `${Buffer.from(email).toString("base64url")}.${createHmac("sha256", process.env.SESSION_SECRET!).update(email).digest("hex")}`;
-  const headers = { Cookie: `pepito_session=${session(company.ownerEmail)}`, Origin: baseURL };
+  const session = (email: string, sessionVersion: number) => createSessionToken(email, sessionVersion, process.env.SESSION_SECRET!);
+  const headers = { Cookie: `pepito_session=${session(company.ownerEmail, company.sessionVersion)}`, Origin: baseURL };
   const redirectUri = `${baseURL}${META_CALLBACK}`;
   const connection = () => prisma.channelConnection.findUnique({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } } });
   try {
@@ -203,7 +204,7 @@ test("Facebook routes: start, refused or forged callbacks, Page choice guards an
     expect(setCookie).toContain(`${META_STATE_COOKIE}=`);
     expect(setCookie).toMatch(/HttpOnly/i);
     expect(setCookie).toContain("Path=/api/oauth/meta");
-    expect(verifyMetaState(state, { companyId: company.id, session: session(company.ownerEmail), redirectUri })).toBe(true);
+    expect(verifyMetaState(state, { companyId: company.id, session: session(company.ownerEmail, company.sessionVersion), redirectUri })).toBe(true);
     expect((await request.get(`${baseURL}/api/oauth/meta/start`, { headers: { ...headers, "Sec-Fetch-Site": "cross-site" }, maxRedirects: 0 })).status()).toBe(403);
 
     // Retour : une connexion existante n'est jamais modifiée par un refus ou un state invalide.
@@ -216,7 +217,7 @@ test("Facebook routes: start, refused or forged callbacks, Page choice guards an
     expect(await outcome(`state=${encodeURIComponent(state)}&code=abc`, headers.Cookie)).toBe("meta_state");
     expect(await outcome(`state=forged&code=abc`, withState)).toBe("meta_state");
     expect(await outcome(`state=forged&code=abc`, `${headers.Cookie}; ${META_STATE_COOKIE}=forged`)).toBe("meta_state");
-    const foreignState = createMetaState({ companyId: other.id, session: session(other.ownerEmail), redirectUri });
+    const foreignState = createMetaState({ companyId: other.id, session: session(other.ownerEmail, other.sessionVersion), redirectUri });
     expect(await outcome(`state=${encodeURIComponent(foreignState)}&code=abc`, `${headers.Cookie}; ${META_STATE_COOKIE}=${foreignState}`)).toBe("meta_state");
     expect(await outcome(`state=${encodeURIComponent(state)}`, withState)).toBe("meta_state");
     expect((await connection())?.accessToken).toBe(existing);
@@ -230,7 +231,7 @@ test("Facebook routes: start, refused or forged callbacks, Page choice guards an
     expect((await choose("9999999")).status()).toBe(400);
     expect((await choose("2000002")).status()).toBe(400);
     expect((await choose("2000001", { ...headers, Origin: "https://untrusted.example" })).status()).toBe(403);
-    expect((await choose("2000001", { Cookie: `pepito_session=${session(other.ownerEmail)}`, Origin: baseURL })).status()).toBe(409);
+    expect((await choose("2000001", { Cookie: `pepito_session=${session(other.ownerEmail, other.sessionVersion)}`, Origin: baseURL })).status()).toBe(409);
     expect((await connection())?.status).toBe("selection_requise");
 
     // La page Connexions propose les Pages par leur nom, sans aucun jeton.
