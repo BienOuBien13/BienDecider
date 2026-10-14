@@ -153,19 +153,19 @@ export function ProposalCard({
           <label htmlFor={`rejection-reason-${proposal.id}`} className="text-xs font-medium text-slate-700">Raison du rejet (facultative)</label>
           <textarea id={`rejection-reason-${proposal.id}`} value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} maxLength={1000} rows={3} disabled={busy} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
           <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={busy} className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm text-white disabled:opacity-50">Confirmer le rejet</button>
-            <button type="button" onClick={() => { setRejecting(false); setRejectionReason(""); }} disabled={busy} className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50">Annuler le rejet</button>
+            <button type="submit" disabled={busy} className="min-h-11 rounded-lg bg-slate-700 px-3 py-2 text-sm text-white disabled:opacity-50">Confirmer le rejet</button>
+            <button type="button" onClick={() => { setRejecting(false); setRejectionReason(""); }} disabled={busy} className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 disabled:opacity-50">Annuler le rejet</button>
           </div>
         </form>
       )}
       {proposal.status === "en_attente" && !rejecting && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {!editing && (
             <button
               type="button"
               onClick={() => { setEditedContent(proposal.content); setEditing(true); }}
               disabled={busy}
-              className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm text-indigo-800 disabled:opacity-50"
+              className="min-h-11 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800 disabled:opacity-50"
             >
               Modifier
             </button>
@@ -175,14 +175,14 @@ export function ProposalCard({
               <button
                 onClick={() => onDecision(proposal.id, "validee")}
                 disabled={busy}
-                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-50"
               >
                 Valider
               </button>
               <button
                 onClick={() => setRejecting(true)}
                 disabled={busy}
-                className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50"
+                className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 disabled:opacity-50"
               >
                 Rejeter
               </button>

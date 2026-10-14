@@ -84,6 +84,26 @@ test("empty screens guide the next activity without automatically starting agent
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`empty-validation-${width}.png`), fullPage: true });
     }
+
+    const pendingProposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "social_post", title: "Un brouillon à valider", content: "Un texte prêt à relire",
+    } });
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    await page.setViewportSize({ width: 320, height: 720 });
+    await page.getByRole("link", { name: "À valider", exact: true }).click();
+    await expect(page).toHaveURL(`${baseURL}/dashboard?view=validation`);
+    const proposal = page.locator("article").filter({ hasText: pendingProposal.title });
+    for (const label of ["Valider", "Rejeter"]) {
+      const button = proposal.getByRole("button", { name: label, exact: true });
+      await expect(button).toBeVisible();
+      expect(await button.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await proposal.getByRole("button", { name: "Rejeter", exact: true }).click();
+    const reason = proposal.getByLabel("Raison du rejet (facultative)");
+    await expect(reason).toBeVisible();
+    await proposal.getByRole("button", { name: "Annuler le rejet", exact: true }).click();
+    await expect(proposal.getByRole("button", { name: "Valider", exact: true })).toBeVisible();
     expect(externalStarts).toEqual([]);
   } finally {
     await prisma.$disconnect();

@@ -85,7 +85,8 @@ test("the OAuth state is bound to the company, the session and the callback, and
   expect(verifyMetaState(state, { ...binding, redirectUri: "https://attacker.example/callback" }, now)).toBe(false);
   const [nonce, expires, signature] = state.split(".");
   expect(verifyMetaState(`${nonce}.${Number(expires) + 60000}.${signature}`, binding, now)).toBe(false);
-  expect(verifyMetaState(`${nonce}.${expires}.${signature.slice(0, -1)}A`, binding, now)).toBe(false);
+  const changedSignature = `${signature[0] === "A" ? "B" : "A"}${signature.slice(1)}`;
+  expect(verifyMetaState(`${nonce}.${expires}.${changedSignature}`, binding, now)).toBe(false);
   for (const malformed of [null, undefined, "", "a.b", `${state}.extra`, "a.not-a-number.c"]) expect(verifyMetaState(malformed, binding, now)).toBe(false);
 });
 
