@@ -3,6 +3,7 @@ import { anthropic, AGENT_MODEL } from "@/lib/anthropic";
 import { companyProfileLines } from "@/lib/agents/personas";
 import { prisma } from "@/lib/prisma";
 import { recordUsage } from "@/lib/usage";
+import { PublishRefusedError } from "@/lib/execution-error";
 
 /**
  * Première exécution réelle de bout en bout du produit : un brief de site
@@ -34,13 +35,6 @@ function sanitizeHtml(html: string): string {
 }
 import { canExecuteAction } from "@/lib/delegation-risk";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
-
-/** Erreur affichable telle quelle au dirigeant, avec le code HTTP à renvoyer. */
-export class PublishRefusedError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
-  }
-}
 
 export async function publishSiteFromProposal(proposalId: string, expectedVersion: number) {
   const proposal = await prisma.agentProposal.findUniqueOrThrow({

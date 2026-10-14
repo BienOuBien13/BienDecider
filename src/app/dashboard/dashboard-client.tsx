@@ -13,12 +13,15 @@ import { useAgentProfileCompletion } from "@/components/agent-profile-completion
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[] };
 type View = "plan" | "validation" | "historique";
 
-function needsAttention(proposal: AgentProposal) {
+function needsAttention(proposal: AgentProposal, facebookPageName: string | null) {
+  const approved = ["validee", "modifiee"].includes(proposal.status);
   return proposal.status === "en_attente" ||
-    (proposal.kind === "site_web_content" && ["validee", "modifiee"].includes(proposal.status));
+    proposal.status === "publication_incertaine" ||
+    (proposal.kind === "site_web_content" && approved) ||
+    (proposal.kind === "social_post" && approved && facebookPageName !== null);
 }
 
-export function DashboardClient({ company, initialPlanItems, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings }: {
+export function DashboardClient({ company, initialPlanItems, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
   company: SafeCompany;
   initialPlanItems: PlanItemWithProposals[];
   initialChatMessages: ChatMessage[];
@@ -26,6 +29,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
   initialDiagnosticCount: number;
   initialView: View;
   riskSettings: Record<string, string>;
+  facebookPageName: string | null;
 }) {
   const { requestProfile, profileDialog, checking } = useAgentProfileCompletion();
   const [planItems, setPlanItems] = useState(initialPlanItems);
@@ -87,7 +91,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
     try {
       await request(`/api/action-plan/${item.id}/launch`, "POST");
       const nextProposals = await refresh();
-      const count = nextProposals.filter((proposal) => proposal.planItemId === item.id && needsAttention(proposal)).length;
+      const count = nextProposals.filter((proposal) => proposal.planItemId === item.id && needsAttention(proposal, facebookPageName)).length;
       setNotice(count > 0 ? `${count} production(s) disponible(s) dans À valider.` : "Action traitée. Le diagnostic est à jour, aucune validation nécessaire.");
     } catch (error) { reportError(error); }
     finally { setBusyId(null); }
@@ -135,11 +139,15 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
     setBusyId(proposalId);
     setError(null);
     try {
-      await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion });
+      const result = await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion });
       setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
-      setNotice("Site publié. La publication figure dans les résultats.");
-    } catch (error) { reportError(error); }
+      setNotice(result?.message ?? "Publication effectuée. Elle figure dans les résultats.");
+    } catch (error) {
+      reportError(error);
+      // Un refus ou un résultat incertain a pu changer l'état : on réaffiche la situation réelle.
+      await refresh().catch(() => undefined);
+    }
     finally { setBusyId(null); }
   }
 
@@ -174,9 +182,9 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
 
   const activeItems = planItems.filter((item) => item.status !== "ecarte" && item.status !== "termine");
   const closedItems = planItems.filter((item) => item.status === "ecarte" || item.status === "termine");
-  const actionable = proposals.filter(needsAttention);
-  const validationItems = proposals.filter((proposal) => needsAttention(proposal) || decidedIds.includes(proposal.id));
-  const history = proposals.filter((proposal) => !needsAttention(proposal));
+  const actionable = proposals.filter((proposal) => needsAttention(proposal, facebookPageName));
+  const validationItems = proposals.filter((proposal) => needsAttention(proposal, facebookPageName) || decidedIds.includes(proposal.id));
+  const history = proposals.filter((proposal) => !needsAttention(proposal, facebookPageName));
   const nextItem = activeItems.find((item) => item.status === "propose");
   const needsFirstDiagnostic = initialDiagnosticCount === 0 && planItems.length === 0;
   const emptyNextHref = needsFirstDiagnostic ? "/diagnostic" : "/dashboard?view=plan";
@@ -244,7 +252,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
           <ol className="divide-y divide-slate-200">
             {activeItems.map((item, index) => {
               const persona = PERSONAS[item.agent as AgentKey];
-              const count = proposals.filter((proposal) => proposal.planItemId === item.id && needsAttention(proposal)).length;
+              const count = proposals.filter((proposal) => proposal.planItemId === item.id && needsAttention(proposal, facebookPageName)).length;
               return (
                 <li key={item.id} className="py-5">
                   <div className="flex flex-wrap items-start gap-3">
@@ -287,7 +295,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
           {validationItems.map((proposal) => (
             <div key={proposal.id}>
               <p className="mb-2 text-xs text-slate-500">{planItems.find((item) => item.id === proposal.planItemId)?.title ?? "Demande ponctuelle à l'équipe"}</p>
-              <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} />
+              <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} />
             </div>
           ))}
         </section>

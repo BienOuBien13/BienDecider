@@ -255,3 +255,42 @@ export function facebookConnectionView(
     return { status: "error" };
   }
 }
+
+export type FacebookPublishOutcome =
+  | { status: "published"; postId: string }
+  | { status: "refused"; tokenRejected: boolean }
+  | { status: "uncertain" };
+
+const publishedSchema = z.object({ id: z.string().min(1).max(200) });
+const graphErrorSchema = z.object({ error: z.object({ code: z.number().optional() }) });
+
+/**
+ * Publie un message texte sur la Page avec son propre jeton. Ne lève jamais :
+ * un refus explicite de Meta (4xx) n'a rien publié, alors qu'une coupure,
+ * un délai dépassé, une erreur 5xx ou une réponse illisible laissent le
+ * résultat incertain — il ne faut alors jamais republier automatiquement.
+ */
+export async function publishFacebookPagePost(
+  page: { id: string; token: string }, message: string, fetchImpl: Fetch = fetch,
+): Promise<FacebookPublishOutcome> {
+  let response: Response;
+  try {
+    response = await fetchImpl(graphUrl(`${encodeURIComponent(page.id)}/feed`, withProof(page.token)), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${page.token}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ message }),
+      signal: AbortSignal.timeout(20000), cache: "no-store",
+    });
+  } catch {
+    return { status: "uncertain" };
+  }
+  const body = await response.json().catch(() => null);
+  if (response.ok) {
+    const published = publishedSchema.safeParse(body);
+    return published.success ? { status: "published", postId: published.data.id } : { status: "uncertain" };
+  }
+  if (response.status >= 500) return { status: "uncertain" };
+  // Code 190 : jeton expiré ou révoqué, la Page doit être reconnectée.
+  const graphError = graphErrorSchema.safeParse(body);
+  return { status: "refused", tokenRejected: response.status === 401 || (graphError.success && graphError.data.error.code === 190) };
+}

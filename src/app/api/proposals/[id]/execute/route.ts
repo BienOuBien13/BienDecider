@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { PublishRefusedError, publishSiteFromProposal } from "@/lib/site/publish";
+import { PublishRefusedError } from "@/lib/execution-error";
+import { publishSiteFromProposal } from "@/lib/site/publish";
 import { getSessionCompany } from "@/lib/session";
+import { publishProposalToFacebook } from "@/lib/social/facebook-publish";
+import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 
 /**
- * Exécution réelle d'une proposition VALIDÉE. Aujourd'hui une seule
- * exécution existe : publier le site d'une page. Les autres types
- * (fiche Google, posts) attendent les connexions OAuth — cf. docs/backlog.md.
+ * Exécution réelle d'une proposition VALIDÉE : publier le site d'une page,
+ * ou une publication sur la Page Facebook connectée. Les autres types
+ * (fiche Google, Instagram, LinkedIn) attendent leurs connecteurs — cf. docs/backlog.md.
  */
 export async function POST(
   _request: NextRequest,
@@ -35,8 +38,13 @@ export async function POST(
   }
 
   try {
+    if (proposal.kind === "social_post") {
+      const riskSettings = await getConfiguredRiskLevels();
+      const { message } = await publishProposalToFacebook(id, company.id, expectedVersion as number, { configuredRiskLevel: riskSettings[proposal.kind] });
+      return NextResponse.json({ message });
+    }
     const { slug } = await publishSiteFromProposal(id, expectedVersion as number);
-    return NextResponse.json({ url: `/site/${slug}` });
+    return NextResponse.json({ url: `/site/${slug}`, message: "Site publié. La publication figure dans les résultats." });
   } catch (error) {
     console.error("Erreur exécution proposition:", error);
     if (error instanceof PublishRefusedError) {
