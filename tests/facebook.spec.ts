@@ -7,6 +7,7 @@ import { createSessionToken } from "../src/lib/session-token";
 import { buildMetaAuthUrl, createMetaState, decryptFacebookAccount, encryptFacebookAccount, exchangeMetaCode,
   facebookConnectionView, FACEBOOK_SCOPES, isMetaOAuthConfigured, META_CALLBACK, META_GRAPH_VERSION, META_STATE_COOKIE,
   MetaOAuthError, revokeFacebookAuthorization, verifyFacebookPage, verifyMetaState, type FacebookAccount } from "../src/lib/oauth/meta";
+import { publishProposalToFacebook } from "../src/lib/social/facebook-publish";
 
 const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
 // Mêmes valeurs factices que le serveur lancé par la CI (.github/workflows/ci.yml) : elles ne sont jamais envoyées à Meta.
@@ -256,6 +257,146 @@ test("Facebook routes: start, refused or forged callbacks, Page choice guards an
     expect(await prisma.channelConnection.count({ where: { companyId: other.id, channel: "facebook" } })).toBe(1);
   } finally {
     await prisma.company.deleteMany({ where: { id: { in: [company.id, other.id] } } });
+    await prisma.$disconnect();
+  }
+});
+
+// Faux point de publication Meta : garde la trace de chaque appel, avec son corps, sans accès réseau.
+function fakeFeed(respond: () => Response | Promise<Response>) {
+  const calls: { url: URL; method: string; authorization: string | null; body: string }[] = [];
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push({ url: new URL(String(input)), method: init?.method ?? "GET", authorization: new Headers(init?.headers).get("authorization"), body: String(init?.body ?? "") });
+    return respond();
+  }) as typeof fetch;
+  return { fetchImpl, calls };
+}
+
+async function refusalOf(promise: Promise<unknown>) {
+  try { await promise; } catch (error) { return (error as { status?: number }).status ?? `other:${String(error)}`; }
+  return "no error";
+}
+
+test("an approved post is published once, on the chosen Page, from its approved version only", async () => {
+  requireLocalDatabase("Facebook tests");
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const company = await prisma.company.create({ data: { name: "Atelier Publication", trade: "Artisan", servingArea: "Paris", ownerEmail: `facebook-publish-${randomUUID()}@example.invalid` } });
+  const post = (data: Record<string, unknown> = {}) => prisma.agentProposal.create({ data: {
+    companyId: company.id, agent: "contenu", kind: "social_post", title: "Post à publier", content: "Nouveau chantier terminé à Paris.",
+    status: "modifiee", version: 2, approvedVersion: 2, ...data,
+  } });
+  const state = (id: string) => prisma.agentProposal.findUniqueOrThrow({ where: { id }, include: { executionLog: true } });
+  try {
+    // Sans Page connectée : refus avant tout appel.
+    const first = await post();
+    const none = fakeFeed(() => json({ id: "never" }));
+    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 2, none.fetchImpl))).toBe(409);
+    await prisma.channelConnection.create({ data: { companyId: company.id, channel: "facebook", status: "connecte",
+      accessToken: encryptFacebookAccount({ ...account, pages: [account.pages[0]], selectedPageId: "2000001" }, company.id) } });
+
+    // Version non approuvée, approbation sans version, version périmée, autre entreprise : rien n'est envoyé à Meta.
+    const draft = await post({ status: "en_attente", approvedVersion: 1 });
+    const legacy = await post({ status: "validee", version: 1, approvedVersion: null });
+    expect(await refusalOf(publishProposalToFacebook(draft.id, company.id, 2, none.fetchImpl))).toBe(400);
+    expect(await refusalOf(publishProposalToFacebook(legacy.id, company.id, 1, none.fetchImpl))).toBe(400);
+    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 1, none.fetchImpl))).toBe(409);
+    expect(await refusalOf(publishProposalToFacebook(first.id, "other-company", 2, none.fetchImpl))).toBe(404);
+    expect(none.calls).toHaveLength(0);
+
+    // Publication : la Page choisie, son jeton, la preuve d'application et exactement le texte approuvé.
+    const meta = fakeFeed(() => json({ id: "2000001_42" }));
+    const published = await publishProposalToFacebook(first.id, company.id, 2, meta.fetchImpl);
+    expect(published.message).toContain("Atelier Test · Page principale");
+    expect(meta.calls).toHaveLength(1);
+    expect(meta.calls[0].method).toBe("POST");
+    expect(meta.calls[0].url.pathname).toBe(`/${META_GRAPH_VERSION}/2000001/feed`);
+    expect(meta.calls[0].authorization).toBe("Bearer private-page-token-1");
+    expect(meta.calls[0].url.searchParams.get("appsecret_proof")).toBe(createHmac("sha256", APP_SECRET).update("private-page-token-1").digest("hex"));
+    expect(new URLSearchParams(meta.calls[0].body).get("message")).toBe("Nouveau chantier terminé à Paris.");
+    const done = await state(first.id);
+    expect(done.status).toBe("executee");
+    expect(done.executionLog).toMatchObject({ result: "succes" });
+    expect(done.executionLog!.detail).toContain("version 2");
+    expect(done.executionLog!.detail).toContain("2000001_42");
+    expect(done.executionLog!.detail).not.toContain("private-");
+
+    // Double clic ou second onglet : aucune seconde publication.
+    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 2, meta.fetchImpl))).toBe(409);
+    const concurrent = await post();
+    const slow = fakeFeed(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); return json({ id: "2000001_43" }); });
+    const results = await Promise.allSettled([1, 2].map(() => publishProposalToFacebook(concurrent.id, company.id, 2, slow.fetchImpl)));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(slow.calls).toHaveLength(1);
+
+    // Refus explicite : rien n'est publié, la version reste approuvée et le journal ne garde aucun secret.
+    const refused = await post();
+    const rejecting = fakeFeed(() => json({ error: { message: "private-page-token-1 invalid", code: 100 } }, 400));
+    expect(await refusalOf(publishProposalToFacebook(refused.id, company.id, 2, rejecting.fetchImpl))).toBe(502);
+    const afterRefusal = await state(refused.id);
+    expect(afterRefusal.status).toBe("modifiee");
+    expect(afterRefusal.executionLog).toMatchObject({ result: "echec" });
+    expect(afterRefusal.executionLog!.detail).not.toContain("private-");
+
+    // Jeton révoqué : la connexion passe en erreur pour être refaite.
+    const expired = await post();
+    expect(await refusalOf(publishProposalToFacebook(expired.id, company.id, 2, fakeFeed(() => json({ error: { code: 190 } }, 400)).fetchImpl))).toBe(502);
+    expect((await prisma.channelConnection.findUniqueOrThrow({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } } })).status).toBe("erreur");
+    await prisma.channelConnection.update({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } }, data: { status: "connecte" } });
+
+    // Coupure ou erreur serveur Meta : résultat incertain, jamais republié automatiquement.
+    const flakyResponses: (() => Response)[] = [() => json({ error: {} }, 503), () => { throw new Error("network"); }, () => json({ unexpected: true })];
+    for (const respond of flakyResponses) {
+      const uncertain = await post();
+      const flaky = fakeFeed(respond);
+      expect(await refusalOf(publishProposalToFacebook(uncertain.id, company.id, 2, flaky.fetchImpl))).toBe(502);
+      expect((await state(uncertain.id)).status).toBe("publication_incertaine");
+      expect(await refusalOf(publishProposalToFacebook(uncertain.id, company.id, 2, flaky.fetchImpl))).toBe(409);
+      expect(flaky.calls).toHaveLength(1);
+    }
+  } finally {
+    await prisma.company.deleteMany({ where: { id: company.id } });
+    await prisma.$disconnect();
+  }
+});
+
+test("the dashboard names the Page and asks for an explicit confirmation before publishing", async ({ page }) => {
+  requireLocalDatabase("Facebook tests");
+  if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for Facebook tests.");
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const company = await prisma.company.create({ data: { name: "Atelier Tableau de bord", trade: "Artisan", servingArea: "Paris", ownerEmail: `facebook-ui-${randomUUID()}@example.invalid` } });
+  try {
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "social_post", title: "Post approuvé pour Facebook", content: "Texte approuvé.", status: "validee", approvedVersion: 1,
+    } });
+    await page.context().addCookies([{ name: "pepito_session", value: createSessionToken(company.ownerEmail, company.sessionVersion, process.env.SESSION_SECRET!), url: baseURL, httpOnly: true, sameSite: "Lax" }]);
+
+    // Sans Page connectée, aucune commande de publication n'est proposée.
+    await page.goto(`${baseURL}/dashboard?view=historique`);
+    const card = page.locator("article").filter({ hasText: proposal.title });
+    await expect(card).toBeVisible();
+    await expect(card.getByRole("button", { name: "Publier sur Facebook" })).toHaveCount(0);
+
+    await prisma.channelConnection.create({ data: { companyId: company.id, channel: "facebook", status: "connecte",
+      accessToken: encryptFacebookAccount({ ...account, pages: [account.pages[0]], selectedPageId: "2000001" }, company.id) } });
+    let executed = 0;
+    await page.route(`**/api/proposals/${proposal.id}/execute`, async (route) => {
+      executed += 1;
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: 1 });
+      await prisma.agentProposal.update({ where: { id: proposal.id }, data: { status: "executee" } });
+      await route.fulfill({ json: { message: "Publication mise en ligne sur la Page Facebook « Atelier Test · Page principale »." } });
+    });
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    await card.getByRole("button", { name: "Publier sur Facebook" }).click();
+    await expect(card.getByText("La version 1 sera publiée maintenant sur la Page Facebook « Atelier Test · Page principale », visible par le public.")).toBeVisible();
+    await card.getByRole("button", { name: "Annuler", exact: true }).click();
+    expect(executed).toBe(0);
+    await card.getByRole("button", { name: "Publier sur Facebook" }).click();
+    await card.getByRole("button", { name: "Confirmer la publication" }).click();
+    await expect(page.getByText("Publication mise en ligne sur la Page Facebook « Atelier Test · Page principale ».")).toBeVisible();
+    await expect(card.getByText("Réalisée", { exact: true })).toBeVisible();
+    expect(executed).toBe(1);
+    expect(await page.content()).not.toContain("private-");
+  } finally {
+    await prisma.company.deleteMany({ where: { id: company.id } });
     await prisma.$disconnect();
   }
 });

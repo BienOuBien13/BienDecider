@@ -13,6 +13,8 @@ export const STATUS_LABELS: Record<string, string> = {
   executee: "Réalisée",
   envoi_en_cours: "Envoi en cours",
   envoi_incertain: "Envoi à vérifier dans Gmail",
+  publication_en_cours: "Publication en cours",
+  publication_incertaine: "Publication à vérifier sur Facebook",
 };
 
 const KIND_LABELS: Record<string, string> = {
@@ -48,6 +50,7 @@ export function ProposalCard({
   busy,
   showAgent = false,
   riskSettings,
+  facebookPageName = null,
 }: {
   proposal: AgentProposal;
   onDecision: (id: string, decision: ProposalDecision) => Promise<boolean>;
@@ -55,11 +58,13 @@ export function ProposalCard({
   busy?: boolean;
   showAgent?: boolean;
   riskSettings?: Record<string, string>;
+  facebookPageName?: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(proposal.content);
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [confirmingPublication, setConfirmingPublication] = useState(false);
   const persona = PERSONAS[proposal.agent as Exclude<AgentKey, "co_ceo">];
   const risk = assessActionRisk(proposal.kind, {}, riskSettings?.[proposal.kind]);
   let displayContent = proposal.content;
@@ -81,6 +86,12 @@ export function ProposalCard({
     proposal.kind === "site_web_content" &&
     approved &&
     !approvalNeedsConfirmation &&
+    onExecute;
+  const canPublishFacebook =
+    proposal.kind === "social_post" &&
+    approved &&
+    !approvalNeedsConfirmation &&
+    facebookPageName !== null &&
     onExecute;
   const decide = (decision: Omit<ProposalDecision, "expectedVersion">) =>
     onDecision(proposal.id, { ...decision, expectedVersion: proposal.version });
@@ -112,7 +123,7 @@ export function ProposalCard({
         </span>
         <span
           className={`rounded-full px-2 py-0.5 ${
-            ["en_attente", "envoi_en_cours", "envoi_incertain"].includes(proposal.status)
+            ["en_attente", "envoi_en_cours", "envoi_incertain", "publication_en_cours", "publication_incertaine"].includes(proposal.status)
               ? "bg-amber-100 text-amber-800"
               : proposal.status === "rejetee"
                 ? "bg-slate-100 text-slate-500"
@@ -229,6 +240,43 @@ export function ProposalCard({
               </button>
             </>
           )}
+        </div>
+      )}
+      {proposal.status === "publication_incertaine" && (
+        <p role="status" className="mt-3 text-sm text-amber-900">
+          Facebook n&apos;a pas confirmé cette publication. Vérifiez votre Page avant toute nouvelle tentative.
+        </p>
+      )}
+      {canPublishFacebook && !confirmingPublication && (
+        <button
+          onClick={() => setConfirmingPublication(true)}
+          disabled={busy}
+          className="mt-3 min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+        >
+          Publier sur Facebook
+        </button>
+      )}
+      {canPublishFacebook && confirmingPublication && (
+        <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+          <p className="text-sm text-slate-800">
+            La version {proposal.version} sera publiée maintenant sur la Page Facebook « {facebookPageName} », visible par le public.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => { setConfirmingPublication(false); onExecute(proposal.id, proposal.version); }}
+              disabled={busy}
+              className="min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+            >
+              Confirmer la publication
+            </button>
+            <button
+              onClick={() => setConfirmingPublication(false)}
+              disabled={busy}
+              className="min-h-11 rounded-lg bg-white px-3 py-2 text-sm text-slate-700 disabled:opacity-50"
+            >
+              Annuler
+            </button>
+          </div>
         </div>
       )}
       {canPublishSite && (

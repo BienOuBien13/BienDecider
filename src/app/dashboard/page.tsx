@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { omitPasswordHash } from "@/lib/safe-company";
 import { DashboardClient } from "./dashboard-client";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
+import { facebookConnectionView } from "@/lib/oauth/meta";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function DashboardPage({ searchParams }: {
   const company = await prisma.company.findUnique({ where: { ownerEmail } });
   if (!company || !company.name) redirect("/onboarding");
 
-  const [planItems, chatMessages, proposals, diagnosticCount, riskSettings] = await Promise.all([
+  const [planItems, chatMessages, proposals, diagnosticCount, riskSettings, facebookConnection] = await Promise.all([
     prisma.actionPlanItem.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "asc" },
@@ -34,7 +35,11 @@ export default async function DashboardPage({ searchParams }: {
     }),
     prisma.auditFinding.count({ where: { companyId: company.id } }),
     getConfiguredRiskLevels(),
+    prisma.channelConnection.findUnique({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } } }),
   ]);
+  // Seul le nom de la Page connectée est transmis au navigateur, jamais un jeton.
+  const facebook = facebookConnectionView(facebookConnection ?? undefined, company.id);
+  const facebookPageName = facebook.status === "connected" ? facebook.pageName : null;
 
   return (
     <AppShell companyName={company.name}>
@@ -45,6 +50,7 @@ export default async function DashboardPage({ searchParams }: {
         initialProposals={proposals}
         initialDiagnosticCount={diagnosticCount}
         riskSettings={riskSettings}
+        facebookPageName={facebookPageName}
         initialView={view === "validation" || view === "historique" ? view : "plan"}
       />
     </AppShell>

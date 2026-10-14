@@ -188,7 +188,7 @@ model AgentProposal {
   kind        String // ex: gbp_update, review_reply, social_post, prospecting_email
   title       String
   content     String // contenu généré, prêt à être validé/modifié
-  status      String   @default("en_attente") // en_attente, validee, modifiee, rejetee, executee
+  status      String   @default("en_attente") // en_attente, validee, modifiee, rejetee, executee ; envois et publications : envoi_en_cours, envoi_incertain, publication_en_cours, publication_incertaine
   // Chaque changement de contenu crée une version ; seule la version approuvée
   // peut être exécutée (US #171). Un brouillon enregistré reste en_attente.
   version         Int       @default(1)
@@ -209,7 +209,7 @@ model ExecutionLog {
   proposalId  String   @unique
   proposal    AgentProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   executedAt  DateTime @default(now())
-  result      String // succes, echec
+  result      String // succes, echec, incertain
   detail      String?
 }
 
