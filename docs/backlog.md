@@ -19,11 +19,14 @@ Tranche `del-5` livrée le 2026-10-10 : facteurs de risque déterministes par ty
 
 **En cours** : PR [#166](https://github.com/groupebienoubien/BienDecider/pull/166) expiration et révocation des sessions (#65) ; #147 application LinkedIn ; #20 objectif en langage naturel ; #5 Gmail ; #9 Meta ; #39 risque par action. Les assignations font foi dans GitHub.
 
-**Audit UX/UI V0 du 13 octobre** : 20 constats en lecture seule (PDF de 30 pages, non versionné car il contient des captures du compte). Challenge et 25 fiches UX-01 à UX-25 dans [audit-ux-backlog.md](audit-ux-backlog.md). Rapprochement avec les Issues du 14 octobre, **en attente d'arbitrage, aucune Issue créée ni modifiée** :
-- 15 nouvelles US proposées : UX-01 à UX-07, UX-09, UX-11, UX-12, UX-14, UX-15, UX-20 (parcours manuel, #46 garde Gmail), UX-22 (tranche sans OAuth de #155), UX-23 (après tests utilisateurs).
-- 11 enrichissements d'Issues existantes : UX-08 → #95/#94, UX-10 → #2, UX-13 → #78, UX-16 → #86/#88, UX-17 → #24, UX-18 → #102/#103/#106, UX-19 → #39, UX-21 → #16, UX-24 → #107, UX-25 → #100, et grammaire visuelle de l'audit (états communs icône + texte, échelle typographique) → #94/#97.
-- Décisions à prendre : vitrine servie hors iframe comme le demande #45, ou sandbox conservée comme le recommande la fiche UX-06 ; UX-19 dans #39 (en cours) ou Issue séparée ; UX-22 séparée de #155 ou fusionnée.
-- Hors périmètre de l'audit, à couvrir par la recette UX-25 : premier onboarding, confirmations de publication, envoi Gmail, retours OAuth, erreurs serveur.
+**Audit UX/UI V0 du 13 octobre** : 20 constats en lecture seule (PDF de 30 pages, non versionné car il contient des captures du compte). Challenge et 25 fiches UX-01 à UX-25 dans [audit-ux-backlog.md](audit-ux-backlog.md). Arbitrage du 14 octobre et mise à jour des Issues :
+- Décisions : la vitrine est **servie directement, sans iframe**, comme le demande #45, et l'anomalie d'ancre UX-06 y est rattachée ; UX-19 devient une **Issue séparée** de #39 ; UX-22 **enrichit #155**.
+- 14 nouvelles US, toutes en `status:backlog`, sans responsable :
+  - P1 : #168 diagnostic courant (UX-01), #169 correction et provenance (UX-02), #170 examiner avant de décider (UX-03), #171 brouillon et version approuvée (UX-04), #172 publier le site prévisualisé (UX-05), #173 labels de formulaires (UX-07), #174 qui fait quoi par canal (UX-09), #175 traitement des données (UX-11), #176 décidé, réalisé, mesuré (UX-12), #179 quoi vérifier avant diffusion (UX-19).
+  - P2 : #177 file groupée par action (UX-14), #178 première décision sur mobile (UX-15), #180 prospect réellement suivi (UX-20, #46 garde Gmail).
+  - P3 : #181 navigation par tâche (UX-23), après les observations de #100.
+- 15 Issues existantes complétées par une section « Complément audit UX du 2026-10-14 » : #45 (UX-06), #155 (UX-22), #95 (UX-08), #94 et #97 (grammaire visuelle et états communs), #2 (UX-10), #78 (UX-13), #86 (UX-16), #24 (UX-17), #102, #103 et #106 (UX-18), #16 (UX-21), #107 (UX-24), #100 (UX-25). Commentaire sur #39 vers #179.
+- Les parcours que l'audit n'a pas testés (premier onboarding, confirmations de publication, envoi Gmail, retours OAuth, erreurs serveur) sont ajoutés au protocole de #100.
 
 Ce document conserve l'historique et les décisions. Les cases ci-dessous reflètent leur date de rédaction ; ne pas les maintenir en parallèle du statut des Issues. Le catalogue initial [github-backlog.json](github-backlog.json) importe uniquement les US de travail restant, sans recréer toutes les livraisons passées. Les changements de statut se font dans GitHub, l'import ne les écrase pas.
 
