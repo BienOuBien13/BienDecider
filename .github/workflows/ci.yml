@@ -42,6 +42,10 @@ jobs:
       UX_TEST_BASE_URL: http://localhost:3000
       # Closes the admin area to an explicit list, as required before opening to external users.
       ADMIN_EMAILS: ci-admin@example.invalid
+      # Dummy Meta application, never sent to Meta: lets the Facebook start and callback routes run in tests.
+      META_APP_ID: ci-meta-app
+      META_APP_SECRET: ci-meta-secret
+      META_TOKEN_ENCRYPTION_KEY: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
       LINKEDIN_CLIENT_ID: ci-linkedin-client
       LINKEDIN_CLIENT_SECRET: ci-linkedin-secret
       LINKEDIN_TOKEN_ENCRYPTION_KEY: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
@@ -92,6 +96,8 @@ jobs:
         run: npm run test:security
       - name: LinkedIn tests (mocked provider, throwaway database)
         run: npm run test:linkedin
+      - name: Facebook connector tests (no call to Meta)
+        run: npm run test:facebook
       - name: Engine tests (Paul and agents around model calls, throwaway database)
         run: npm run test:engine
       - name: Upload test results on failure

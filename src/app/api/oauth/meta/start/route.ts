@@ -1,21 +1,24 @@
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionEmail } from "@/lib/session";
-import { createOAuthState } from "@/lib/oauth/state";
-import { buildMetaAuthUrl, isMetaOAuthConfigured } from "@/lib/oauth/meta";
+import { getSessionCompany } from "@/lib/session";
+import { buildMetaAuthUrl, createMetaState, isMetaOAuthConfigured, META_CALLBACK, META_STATE_COOKIE } from "@/lib/oauth/meta";
 
 export async function GET(request: NextRequest) {
-  const ownerEmail = await getSessionEmail();
-  if (!ownerEmail) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  const company = await getSessionCompany();
+  if (!company) return NextResponse.redirect(new URL("/login", request.url));
+  if (request.headers.get("sec-fetch-site") === "cross-site") return NextResponse.json({ error: "Origine refusée." }, { status: 403 });
+  if (!isMetaOAuthConfigured()) return NextResponse.redirect(new URL("/connexions?error=meta_config", request.url));
+  const store = await cookies();
+  const session = store.get("pepito_session")?.value;
+  if (!session) return NextResponse.redirect(new URL("/login", request.url));
+  try {
+    const redirectUri = new URL(META_CALLBACK, request.url).toString();
+    const state = createMetaState({ companyId: company.id, session, redirectUri });
+    store.set(META_STATE_COOKIE, state, {
+      httpOnly: true, sameSite: "lax", secure: request.nextUrl.protocol === "https:", path: "/api/oauth/meta", maxAge: 600,
+    });
+    return NextResponse.redirect(buildMetaAuthUrl(redirectUri, state));
+  } catch {
+    return NextResponse.redirect(new URL("/connexions?error=meta_start", request.url));
   }
-  if (!isMetaOAuthConfigured()) {
-    return NextResponse.json(
-      { error: "META_APP_ID / META_APP_SECRET non configurés côté serveur" },
-      { status: 503 },
-    );
-  }
-
-  const state = await createOAuthState();
-  const redirectUri = new URL("/api/oauth/meta/callback", request.url).toString();
-  return NextResponse.redirect(buildMetaAuthUrl(redirectUri, state));
 }
