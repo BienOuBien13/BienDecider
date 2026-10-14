@@ -4,6 +4,7 @@ import { PublishRefusedError } from "@/lib/execution-error";
 import { publishSiteFromProposal } from "@/lib/site/publish";
 import { getSessionCompany } from "@/lib/session";
 import { publishProposalToFacebook } from "@/lib/social/facebook-publish";
+import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 
 /**
  * Exécution réelle d'une proposition VALIDÉE : publier le site d'une page,
@@ -38,7 +39,8 @@ export async function POST(
 
   try {
     if (proposal.kind === "social_post") {
-      const { message } = await publishProposalToFacebook(id, company.id, expectedVersion as number);
+      const riskSettings = await getConfiguredRiskLevels();
+      const { message } = await publishProposalToFacebook(id, company.id, expectedVersion as number, { configuredRiskLevel: riskSettings[proposal.kind] });
       return NextResponse.json({ message });
     }
     const { slug } = await publishSiteFromProposal(id, expectedVersion as number);

@@ -289,22 +289,22 @@ test("an approved post is published once, on the chosen Page, from its approved 
     // Sans Page connectée : refus avant tout appel.
     const first = await post();
     const none = fakeFeed(() => json({ id: "never" }));
-    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 2, none.fetchImpl))).toBe(409);
+    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 2, { fetchImpl: none.fetchImpl }))).toBe(409);
     await prisma.channelConnection.create({ data: { companyId: company.id, channel: "facebook", status: "connecte",
       accessToken: encryptFacebookAccount({ ...account, pages: [account.pages[0]], selectedPageId: "2000001" }, company.id) } });
 
     // Version non approuvée, approbation sans version, version périmée, autre entreprise : rien n'est envoyé à Meta.
     const draft = await post({ status: "en_attente", approvedVersion: 1 });
     const legacy = await post({ status: "validee", version: 1, approvedVersion: null });
-    expect(await refusalOf(publishProposalToFacebook(draft.id, company.id, 2, none.fetchImpl))).toBe(400);
-    expect(await refusalOf(publishProposalToFacebook(legacy.id, company.id, 1, none.fetchImpl))).toBe(400);
-    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 1, none.fetchImpl))).toBe(409);
-    expect(await refusalOf(publishProposalToFacebook(first.id, "other-company", 2, none.fetchImpl))).toBe(404);
+    expect(await refusalOf(publishProposalToFacebook(draft.id, company.id, 2, { fetchImpl: none.fetchImpl }))).toBe(400);
+    expect(await refusalOf(publishProposalToFacebook(legacy.id, company.id, 1, { fetchImpl: none.fetchImpl }))).toBe(400);
+    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 1, { fetchImpl: none.fetchImpl }))).toBe(409);
+    expect(await refusalOf(publishProposalToFacebook(first.id, "other-company", 2, { fetchImpl: none.fetchImpl }))).toBe(404);
     expect(none.calls).toHaveLength(0);
 
     // Publication : la Page choisie, son jeton, la preuve d'application et exactement le texte approuvé.
     const meta = fakeFeed(() => json({ id: "2000001_42" }));
-    const published = await publishProposalToFacebook(first.id, company.id, 2, meta.fetchImpl);
+    const published = await publishProposalToFacebook(first.id, company.id, 2, { fetchImpl: meta.fetchImpl });
     expect(published.message).toContain("Atelier Test · Page principale");
     expect(meta.calls).toHaveLength(1);
     expect(meta.calls[0].method).toBe("POST");
@@ -320,17 +320,17 @@ test("an approved post is published once, on the chosen Page, from its approved 
     expect(done.executionLog!.detail).not.toContain("private-");
 
     // Double clic ou second onglet : aucune seconde publication.
-    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 2, meta.fetchImpl))).toBe(409);
+    expect(await refusalOf(publishProposalToFacebook(first.id, company.id, 2, { fetchImpl: meta.fetchImpl }))).toBe(409);
     const concurrent = await post();
     const slow = fakeFeed(async () => { await new Promise((resolve) => setTimeout(resolve, 200)); return json({ id: "2000001_43" }); });
-    const results = await Promise.allSettled([1, 2].map(() => publishProposalToFacebook(concurrent.id, company.id, 2, slow.fetchImpl)));
+    const results = await Promise.allSettled([1, 2].map(() => publishProposalToFacebook(concurrent.id, company.id, 2, { fetchImpl: slow.fetchImpl })));
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(slow.calls).toHaveLength(1);
 
     // Refus explicite : rien n'est publié, la version reste approuvée et le journal ne garde aucun secret.
     const refused = await post();
     const rejecting = fakeFeed(() => json({ error: { message: "private-page-token-1 invalid", code: 100 } }, 400));
-    expect(await refusalOf(publishProposalToFacebook(refused.id, company.id, 2, rejecting.fetchImpl))).toBe(502);
+    expect(await refusalOf(publishProposalToFacebook(refused.id, company.id, 2, { fetchImpl: rejecting.fetchImpl }))).toBe(502);
     const afterRefusal = await state(refused.id);
     expect(afterRefusal.status).toBe("modifiee");
     expect(afterRefusal.executionLog).toMatchObject({ result: "echec" });
@@ -338,7 +338,7 @@ test("an approved post is published once, on the chosen Page, from its approved 
 
     // Jeton révoqué : la connexion passe en erreur pour être refaite.
     const expired = await post();
-    expect(await refusalOf(publishProposalToFacebook(expired.id, company.id, 2, fakeFeed(() => json({ error: { code: 190 } }, 400)).fetchImpl))).toBe(502);
+    expect(await refusalOf(publishProposalToFacebook(expired.id, company.id, 2, { fetchImpl: fakeFeed(() => json({ error: { code: 190 } }, 400)).fetchImpl }))).toBe(502);
     expect((await prisma.channelConnection.findUniqueOrThrow({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } } })).status).toBe("erreur");
     await prisma.channelConnection.update({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } }, data: { status: "connecte" } });
 
@@ -347,9 +347,9 @@ test("an approved post is published once, on the chosen Page, from its approved 
     for (const respond of flakyResponses) {
       const uncertain = await post();
       const flaky = fakeFeed(respond);
-      expect(await refusalOf(publishProposalToFacebook(uncertain.id, company.id, 2, flaky.fetchImpl))).toBe(502);
+      expect(await refusalOf(publishProposalToFacebook(uncertain.id, company.id, 2, { fetchImpl: flaky.fetchImpl }))).toBe(502);
       expect((await state(uncertain.id)).status).toBe("publication_incertaine");
-      expect(await refusalOf(publishProposalToFacebook(uncertain.id, company.id, 2, flaky.fetchImpl))).toBe(409);
+      expect(await refusalOf(publishProposalToFacebook(uncertain.id, company.id, 2, { fetchImpl: flaky.fetchImpl }))).toBe(409);
       expect(flaky.calls).toHaveLength(1);
     }
   } finally {

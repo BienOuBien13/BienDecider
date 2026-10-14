@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { canExecuteAction } from "@/lib/delegation-risk";
-import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 import { decryptFacebookAccount, publishFacebookPagePost } from "@/lib/oauth/meta";
 import { PublishRefusedError } from "@/lib/execution-error";
 
@@ -14,7 +13,8 @@ const APPROVED = ["validee", "modifiee"];
  * résultat incertain n'est jamais relancé automatiquement.
  */
 export async function publishProposalToFacebook(
-  proposalId: string, companyId: string, expectedVersion: number, fetchImpl: typeof fetch = fetch,
+  proposalId: string, companyId: string, expectedVersion: number,
+  { configuredRiskLevel, fetchImpl = fetch }: { configuredRiskLevel?: string | null; fetchImpl?: typeof fetch } = {},
 ) {
   const proposal = await prisma.agentProposal.findFirst({ where: { id: proposalId, companyId } });
   if (!proposal) throw new PublishRefusedError("Proposition introuvable.", 404);
@@ -24,8 +24,7 @@ export async function publishProposalToFacebook(
   }
 
   const humanApproved = APPROVED.includes(proposal.status) && proposal.approvedVersion === proposal.version;
-  const riskSettings = await getConfiguredRiskLevels();
-  if (!canExecuteAction(proposal.kind, "accompagner", humanApproved, { publicExposure: true }, riskSettings[proposal.kind])) {
+  if (!canExecuteAction(proposal.kind, "accompagner", humanApproved, { publicExposure: true }, configuredRiskLevel)) {
     throw new PublishRefusedError("Approuvez cette version de la publication avant de la publier.", 400);
   }
   if (expectedVersion !== proposal.version) {
