@@ -26,6 +26,13 @@ const KIND_LABELS: Record<string, string> = {
   gmail_email: "Email Gmail manuel",
 };
 
+export type ProposalDecision = {
+  status: "brouillon" | "validee" | "modifiee" | "rejetee";
+  expectedVersion: number;
+  content?: string;
+  rejectionReason?: string;
+};
+
 const RISK_FACTOR_LABELS: Record<keyof ReturnType<typeof assessActionRisk>["factors"], string> = {
   publicExposure: "Exposition publique",
   externalCommunication: "Communication externe",
@@ -43,8 +50,8 @@ export function ProposalCard({
   riskSettings,
 }: {
   proposal: AgentProposal;
-  onDecision: (id: string, status: "validee" | "modifiee" | "rejetee", content?: string, rejectionReason?: string) => Promise<boolean>;
-  onExecute?: (id: string) => void;
+  onDecision: (id: string, decision: ProposalDecision) => Promise<boolean>;
+  onExecute?: (id: string, expectedVersion: number) => void;
   busy?: boolean;
   showAgent?: boolean;
   riskSettings?: Record<string, string>;
@@ -66,19 +73,31 @@ export function ProposalCard({
       displayContent = proposal.content;
     }
   }
+  const approved = ["validee", "modifiee"].includes(proposal.status);
+  // Une approbation antérieure au versionnage ne désigne aucune version : elle doit être reconfirmée avant exécution.
+  const approvalNeedsConfirmation = approved && proposal.approvedVersion !== proposal.version;
+  const canEdit = proposal.status === "en_attente" || (approved && proposal.kind !== "prospect");
   const canPublishSite =
     proposal.kind === "site_web_content" &&
-    ["validee", "modifiee"].includes(proposal.status) &&
+    approved &&
+    !approvalNeedsConfirmation &&
     onExecute;
+  const decide = (decision: Omit<ProposalDecision, "expectedVersion">) =>
+    onDecision(proposal.id, { ...decision, expectedVersion: proposal.version });
 
-  async function saveEditedContent(event: React.FormEvent) {
+  // En cas d'échec, l'éditeur reste ouvert avec le texte saisi : rien n'est perdu ni annoncé à tort comme enregistré.
+  async function saveDraft() {
+    if (await decide({ status: "brouillon", content: editedContent.trim() })) setEditing(false);
+  }
+
+  async function approveEditedContent(event: React.FormEvent) {
     event.preventDefault();
-    if (await onDecision(proposal.id, "modifiee", editedContent.trim())) setEditing(false);
+    if (await decide({ status: "modifiee", content: editedContent.trim() })) setEditing(false);
   }
 
   async function rejectProposal(event: React.FormEvent) {
     event.preventDefault();
-    if (await onDecision(proposal.id, "rejetee", undefined, rejectionReason.trim())) {
+    if (await decide({ status: "rejetee", rejectionReason: rejectionReason.trim() })) {
       setRejecting(false);
       setRejectionReason("");
     }
@@ -104,6 +123,13 @@ export function ProposalCard({
         </span>
       </div>
       <h3 className="mt-1 font-medium">{proposal.title}</h3>
+      <p className="mt-1 text-xs text-slate-600">
+        Version {proposal.version}
+        {proposal.status === "en_attente" && proposal.draftSavedAt && (
+          <> · Brouillon enregistré le {new Date(proposal.draftSavedAt).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}, non approuvé</>
+        )}
+        {approved && proposal.approvedVersion === proposal.version && " · version approuvée"}
+      </p>
       <details className="mt-2">
         <summary className="flex w-fit cursor-pointer items-center gap-2 text-xs text-slate-600">
           <span className={`rounded px-2 py-0.5 font-medium ${risk.level === "faible" ? "bg-emerald-50 text-emerald-800" : risk.level === "modere" ? "bg-amber-50 text-amber-800" : "bg-rose-50 text-rose-800"}`}>{risk.label}</span>
@@ -119,7 +145,7 @@ export function ProposalCard({
         <p className="mt-1 text-xs font-medium text-slate-700">Dans ce prototype, toute action réelle reste soumise à votre validation.</p>
       </details>
       {editing ? (
-        <form onSubmit={saveEditedContent} className="mt-3 space-y-2">
+        <form onSubmit={approveEditedContent} className="mt-3 space-y-2">
           <label htmlFor={`proposal-content-${proposal.id}`} className="text-xs font-medium text-slate-700">Modifier le contenu</label>
           <textarea
             id={`proposal-content-${proposal.id}`}
@@ -130,11 +156,17 @@ export function ProposalCard({
             required
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
+          {approved && (
+            <p className="text-xs text-amber-800">Enregistrer une modification retire l&apos;approbation actuelle : la nouvelle version sera à relire.</p>
+          )}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={busy || !editedContent.trim()} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">
-              Enregistrer et valider la version
+            <button type="button" onClick={saveDraft} disabled={busy || !editedContent.trim()} className="min-h-11 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800 disabled:opacity-50">
+              Enregistrer le brouillon
             </button>
-            <button type="button" onClick={() => { setEditedContent(proposal.content); setEditing(false); }} disabled={busy} className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50">
+            <button type="submit" disabled={busy || !editedContent.trim()} className="min-h-11 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-50">
+              Approuver cette version
+            </button>
+            <button type="button" onClick={() => { setEditedContent(proposal.content); setEditing(false); }} disabled={busy} className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 disabled:opacity-50">
               Annuler la modification
             </button>
           </div>
@@ -158,7 +190,7 @@ export function ProposalCard({
           </div>
         </form>
       )}
-      {proposal.status === "en_attente" && !rejecting && (
+      {canEdit && !rejecting && (
         <div className="mt-3 flex flex-wrap gap-2">
           {!editing && (
             <button
@@ -170,10 +202,19 @@ export function ProposalCard({
               Modifier
             </button>
           )}
-          {!editing && (
+          {!editing && approvalNeedsConfirmation && (
+            <button
+              onClick={() => decide({ status: "validee" })}
+              disabled={busy}
+              className="min-h-11 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+            >
+              Confirmer l&apos;approbation de cette version
+            </button>
+          )}
+          {!editing && proposal.status === "en_attente" && (
             <>
               <button
-                onClick={() => onDecision(proposal.id, "validee")}
+                onClick={() => decide({ status: "validee" })}
                 disabled={busy}
                 className="min-h-11 rounded-lg bg-emerald-600 px-3 py-2 text-sm text-white disabled:opacity-50"
               >
@@ -192,7 +233,7 @@ export function ProposalCard({
       )}
       {canPublishSite && (
         <button
-          onClick={() => onExecute(proposal.id)}
+          onClick={() => onExecute(proposal.id, proposal.version)}
           disabled={busy}
           className="mt-3 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
         >

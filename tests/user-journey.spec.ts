@@ -252,31 +252,91 @@ test("growth journey shows progress, the current step and can be hidden and rest
   await expect(journey.getByRole("heading", { name: "Votre parcours" })).toBeVisible();
 });
 
-test("proposal can be edited and saved as the approved version without executing it", async ({ page, company }) => {
+test("a draft is saved without approval, then a precise version is approved without executing it", async ({ page, company }) => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
-  const updatedContent = "Texte corrigé par le dirigeant avant validation.";
-  let proposalId = "";
+  const draftContent = "Texte corrigé par le dirigeant, à reprendre plus tard.";
+  const finalContent = "Texte final approuvé par le dirigeant.";
   try {
+    const item = await prisma.actionPlanItem.create({ data: { companyId: company.id, agent: "contenu", title: "Action à relire", rationale: "Test", timing: "Cette semaine", status: "lance" } });
     const proposal = await prisma.agentProposal.create({ data: {
-      companyId: company.id,
-      agent: "contenu",
-      kind: "social_post",
-      title: "Publication à corriger",
-      content: "Version initiale à corriger.",
+      companyId: company.id, planItemId: item.id, agent: "contenu", kind: "social_post", title: "Publication à corriger", content: "Version initiale à corriger.",
     } });
-    proposalId = proposal.id;
+    const patch = (data: unknown) => page.request.patch(`${baseURL}/api/proposals/${proposal.id}`, { data });
 
     await page.goto(`${baseURL}/dashboard?view=validation`);
     const card = page.locator("article").filter({ hasText: proposal.title });
     await card.getByRole("button", { name: "Modifier", exact: true }).click();
-    await card.getByRole("textbox", { name: "Modifier le contenu" }).fill(updatedContent);
-    await card.getByRole("button", { name: "Enregistrer et valider la version", exact: true }).click();
+    await card.getByRole("textbox", { name: "Modifier le contenu" }).fill(draftContent);
+    await card.getByRole("button", { name: "Enregistrer le brouillon", exact: true }).click();
+    await expect(card.getByText(/Brouillon enregistré le .*, non approuvé/)).toBeVisible();
 
+    // Le brouillon survit au rechargement sans valoir décision ni terminer l'action.
+    await page.reload();
+    await expect(card.getByText("À valider", { exact: true })).toBeVisible();
+    let saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+    expect(saved).toMatchObject({ content: draftContent, version: 2, status: "en_attente", approvedVersion: null, decidedAt: null });
+    expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("lance");
+
+    // Écritures sans version, ou depuis une version périmée : refusées sans rien modifier.
+    expect((await patch({ status: "validee" })).status()).toBe(400);
+    expect((await patch({ status: "validee", expectedVersion: 1 })).status()).toBe(409);
+    expect((await patch({ status: "brouillon", content: "Écrasement depuis un autre onglet", expectedVersion: 1 })).status()).toBe(409);
+    expect((await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } })).content).toBe(draftContent);
+
+    // Un échec réseau garde le texte dans l'éditeur, sans indication trompeuse.
+    await card.getByRole("button", { name: "Modifier", exact: true }).click();
+    await card.getByRole("textbox", { name: "Modifier le contenu" }).fill(finalContent);
+    await page.route(`**/api/proposals/${proposal.id}`, (route) => route.fulfill({ status: 500, json: { error: "Enregistrement impossible" } }));
+    await card.getByRole("button", { name: "Enregistrer le brouillon", exact: true }).click();
+    await expect(page.locator("main").getByRole("alert")).toHaveText("Enregistrement impossible");
+    await expect(card.getByRole("textbox", { name: "Modifier le contenu" })).toHaveValue(finalContent);
+    await page.unroute(`**/api/proposals/${proposal.id}`);
+
+    await card.getByRole("button", { name: "Approuver cette version", exact: true }).click();
     await expect(card.getByText("Modifiée", { exact: true })).toBeVisible();
-    expect((await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } })).content).toBe(updatedContent);
+    saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+    expect(saved).toMatchObject({ content: finalContent, version: 3, approvedVersion: 3, status: "modifiee" });
+    expect(saved.approvedAt).not.toBeNull();
+    expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("termine");
     expect(await prisma.executionLog.count({ where: { proposalId: proposal.id } })).toBe(0);
+
+    // Modifier après approbation crée une version non approuvée et rouvre l'action.
+    expect((await patch({ status: "brouillon", content: "Nouvelle idée après approbation", expectedVersion: 3 })).status()).toBe(200);
+    saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+    expect(saved).toMatchObject({ version: 4, approvedVersion: 3, status: "en_attente" });
+    expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("lance");
   } finally {
-    if (proposalId) await prisma.agentProposal.deleteMany({ where: { id: proposalId } });
+    await prisma.$disconnect();
+  }
+});
+
+test("a site is published only from its approved version", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const execute = (id: string, data?: unknown) => page.request.post(`${baseURL}/api/proposals/${id}/execute`, { headers: { Origin: baseURL }, data });
+    // Approbation antérieure au versionnage : aucune version désignée, rien n'est publié.
+    const legacy = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Site approuvé avant versionnage", content: "Brief", status: "validee",
+    } });
+    expect((await execute(legacy.id, { expectedVersion: 1 })).status()).toBe(400);
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const card = page.locator("article").filter({ hasText: legacy.title });
+    await expect(card.getByRole("button", { name: "Publier le site" })).toHaveCount(0);
+    await card.getByRole("button", { name: "Confirmer l'approbation de cette version", exact: true }).click();
+    await expect(card.getByRole("button", { name: "Publier le site" })).toBeVisible();
+    expect((await prisma.agentProposal.findUniqueOrThrow({ where: { id: legacy.id } })).approvedVersion).toBe(1);
+
+    // Une confirmation pour une version remplacée est refusée par le serveur, même en contournant l'interface.
+    const changed = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Site modifié après aperçu", content: "Brief v2", status: "modifiee", version: 2, approvedVersion: 2,
+    } });
+    expect((await execute(changed.id)).status()).toBe(400);
+    expect((await execute(changed.id, { expectedVersion: 1 })).status()).toBe(409);
+    for (const id of [legacy.id, changed.id]) {
+      expect(await prisma.executionLog.count({ where: { proposalId: id } })).toBe(0);
+    }
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).siteHtml).toBeNull();
+  } finally {
     await prisma.$disconnect();
   }
 });
@@ -288,7 +348,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await prisma.agentProposal.createMany({ data: [
       { companyId: company.id, planItemId: item.id, agent: "contenu", kind: "social_post", title: "Publication issue du plan", content: "Contenu du plan" },
       { companyId: company.id, agent: "contenu", kind: "social_post", title: "Demande manuelle", content: "Contenu manuel" },
-      { companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Site approuvé à publier", content: "Contenu du site", status: "validee" },
+      { companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Site approuvé à publier", content: "Contenu du site", status: "validee", approvedVersion: 1 },
     ] });
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`${baseURL}/dashboard`);
