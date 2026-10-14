@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from "jose";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { requireLocalDatabase } from "./support/local-database";
+import { createSessionToken } from "../src/lib/session-token";
 import { buildLinkedInAuthUrl, decryptLinkedInAccount, encryptLinkedInAccount, exchangeLinkedInCode,
   hashLinkedInState, isLinkedInConfigured, LINKEDIN_CALLBACK, LINKEDIN_SCOPES, LINKEDIN_STATE_COOKIE,
   verifyLinkedInIdentity } from "../src/lib/oauth/linkedin";
@@ -157,7 +158,7 @@ test("LinkedIn routes reject invalid state, preserve prior identity on cancellat
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
   const owner = await prisma.company.create({ data: { ownerEmail: `linkedin-${randomUUID()}@example.invalid`, name: "LinkedIn Test", trade: "Artisan", servingArea: "Paris" } });
   const other = await prisma.company.create({ data: { ownerEmail: `linkedin-${randomUUID()}@example.invalid`, name: "Other Test", trade: "Artisan", servingArea: "Paris" } });
-  const sessionValue = (email: string) => `${Buffer.from(email).toString("base64url")}.${createHmac("sha256", process.env.SESSION_SECRET!).update(email).digest("hex")}`;
+  const sessionValue = (email: string) => createSessionToken(email, 0, process.env.SESSION_SECRET!);
   const session = sessionValue(owner.ownerEmail);
   const headers = { Cookie: `pepito_session=${session}`, Origin: baseURL };
   const redirectUri = `${baseURL}${LINKEDIN_CALLBACK}`;

@@ -23,7 +23,7 @@ flowchart LR
 | Base de données | **PostgreSQL** (Prisma Postgres, hébergé par Vercel) | Seul choix viable pour un hébergement serverless (SQLite ne survit pas à un filesystem éphémère) |
 | ORM | **Prisma 7** avec `@prisma/adapter-pg` | Driver adapter explicite (obligatoire depuis Prisma 7 — plus d'URL magique dans le schéma) |
 | IA | **Claude Sonnet 5.5** (`claude-sonnet-5-5`) via `@anthropic-ai/sdk`, pattern **Tool Runner** | Un seul modèle partout pour l'instant ; chaque agent définit ses propres outils (function calling), la bibliothèque gère la boucle d'appel |
-| Auth | Cookie de session **signé HMAC-SHA256** (`SESSION_SECRET`) + mot de passe haché **scrypt** (natif Node, aucune dépendance) | Corrigé le 2026-10-05 après une faille critique (cookie en clair forgeable) — voir [backlog.md](backlog.md) |
+| Auth | Cookie de session **signé HMAC-SHA256** (`SESSION_SECRET`), expiration à 30 jours, `HttpOnly`/`SameSite=Lax`, `Secure` en production ; version de session révocable en base. Mot de passe haché **scrypt** (natif Node, aucune dépendance). | Cookie forgé corrigé le 2026-10-05 ; expiration et révocation étendues par l'US #65 — voir [backlog.md](backlog.md) |
 | Hébergement | **Vercel**, déploiement auto sur push GitHub | Zéro configuration CI/CD, intégration GitHub native (aucune clé API partagée) |
 | OAuth (optionnel) | Google OAuth2, Meta Graph API | Code prêt, inactif tant que les identifiants ne sont pas fournis (`/connexions` l'indique honnêtement) |
 

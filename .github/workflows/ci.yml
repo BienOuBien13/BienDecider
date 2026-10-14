@@ -65,6 +65,8 @@ jobs:
         run: npm run test:gmail
       - name: Database URL resolution tests (no network)
         run: npm run test:database-url
+      - name: Session token tests (no database)
+        run: npm run test:session
       - name: Backlog importer tests (no network)
         run: node --test scripts/sync-backlog.test.cjs
       - name: Wiki pages build and relative links resolve
