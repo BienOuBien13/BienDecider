@@ -2,6 +2,7 @@ import { test as base, expect } from "@playwright/test";
 import type { Company } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import { requireLocalDatabase } from "./support/local-database";
+import { createSessionToken } from "../src/lib/session-token";
 
 // Tests du moteur (Paul et les agents) sans appel au modèle : ils vérifient
 // ce que le code lit et écrit en base autour des appels, pas la qualité des
@@ -105,10 +106,8 @@ test("a failed launch shows an error, keeps the action to launch and creates no 
   test.skip(Boolean(process.env.ANTHROPIC_API_KEY), "Runs only without a model key, so that agent calls fail instead of reaching the provider.");
   if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for engine tests.");
   const { prisma } = await import("../src/lib/prisma");
-  const { createHmac } = await import("node:crypto");
   const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
-  const signature = createHmac("sha256", process.env.SESSION_SECRET).update(company.ownerEmail).digest("hex");
-  const headers = { Cookie: `pepito_session=${Buffer.from(company.ownerEmail).toString("base64url")}.${signature}`, Origin: baseURL };
+  const headers = { Cookie: `pepito_session=${createSessionToken(company.ownerEmail, company.sessionVersion, process.env.SESSION_SECRET)}`, Origin: baseURL };
 
   for (const agent of ["marketing", "contenu", "demarchage"]) {
     const item = await prisma.actionPlanItem.create({ data: { companyId: company.id, agent, title: `Action ${agent}`, rationale: "Test d'échec", timing: "Aujourd'hui" } });
@@ -218,7 +217,7 @@ test("a request made in the chat becomes a plan action that can only be launched
 
 test("a request outside the catalogue is recorded for the founders and shown only to explicit admins", async ({ company, request }) => {
   if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for engine tests.");
-  const { createHmac } = await import("node:crypto");
+  const { prisma } = await import("../src/lib/prisma");
   const { CAPABILITY_CATALOG, recordUncoveredRequest, listUncoveredRequests } = await import("../src/lib/agents/capabilities");
   expect(CAPABILITY_CATALOG).toContain("Hors catalogue");
   expect(CAPABILITY_CATALOG).toContain("publicité payante");
@@ -237,15 +236,18 @@ test("a request outside the catalogue is recorded for the founders and shown onl
   const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((email) => email.trim()).filter(Boolean);
   test.skip(admins.length === 0, "Page check needs ADMIN_EMAILS shared by the server and the tests, as in CI.");
   const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
-  const cookie = (email: string) => {
-    const signature = createHmac("sha256", process.env.SESSION_SECRET!).update(email).digest("hex");
-    return { Cookie: `pepito_session=${Buffer.from(email).toString("base64url")}.${signature}` };
-  };
-  const asAdmin = await request.get(`${baseURL}/admin`, { headers: cookie(admins[0]) });
+  let adminCompany = await prisma.company.findUnique({ where: { ownerEmail: admins[0] } });
+  const createdAdminCompany = !adminCompany;
+  adminCompany ??= await prisma.company.create({ data: {
+    ownerEmail: admins[0], name: "Admin Test", trade: "Artisan", servingArea: "Paris",
+  } });
+  const cookie = (email: string, sessionVersion: number) => ({ Cookie: `pepito_session=${createSessionToken(email, sessionVersion, process.env.SESSION_SECRET!)}` });
+  const asAdmin = await request.get(`${baseURL}/admin`, { headers: cookie(admins[0], adminCompany.sessionVersion) });
   expect(asAdmin.status()).toBe(200);
   const adminPage = await asAdmin.text();
   expect(adminPage).toContain("Demandes hors catalogue");
   expect(adminPage).toContain(marker);
-  const asOwner = await request.get(`${baseURL}/admin`, { headers: cookie(company.ownerEmail) });
+  const asOwner = await request.get(`${baseURL}/admin`, { headers: cookie(company.ownerEmail, company.sessionVersion) });
   expect(await asOwner.text()).not.toContain(marker);
+  if (createdAdminCompany) await prisma.company.delete({ where: { id: adminCompany.id } });
 });

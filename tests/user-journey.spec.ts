@@ -1,11 +1,12 @@
 import { test as base, expect } from "@playwright/test";
 import { PrismaClient, type Company } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { config } from "dotenv";
 import { encryptGmailToken } from "../src/lib/oauth/gmail";
 import { companyProfileLines, objectiveLine } from "../src/lib/agents/personas";
 import { getRejectionContext } from "../src/lib/agents/rejection-context";
+import { createSessionToken } from "../src/lib/session-token";
 
 config({ quiet: true });
 
@@ -30,9 +31,8 @@ const test = base.extend<{ company: Company }>({
       description: "Artisan de proximité", phone: "0100000000", certifications: "Label de test", openingHours: "Lundi au vendredi",
     } });
     try {
-      const encoded = Buffer.from(ownerEmail).toString("base64url");
-      const signature = createHmac("sha256", process.env.SESSION_SECRET).update(ownerEmail).digest("hex");
-      await page.context().addCookies([{ name: "pepito_session", value: `${encoded}.${signature}`, url: baseURL, httpOnly: true, sameSite: "Lax" }]);
+      const session = createSessionToken(ownerEmail, company.sessionVersion, process.env.SESSION_SECRET);
+      await page.context().addCookies([{ name: "pepito_session", value: session, url: baseURL, httpOnly: true, sameSite: "Lax" }]);
       await page.route("**/api/agents/**", (route) => route.fulfill({ status: 503, json: { error: "Agent indisponible pour le test" } }));
       await runFixture(company);
     } finally {
@@ -476,10 +476,7 @@ test("explicit admin can tune global risk level but cannot lower the effective f
   const otherContext = await page.context().browser()!.newContext();
   try {
     const otherPage = await otherContext.newPage();
-    const otherEmail = "ordinary-pilot@example.invalid";
-    const encoded = Buffer.from(otherEmail).toString("base64url");
-    const signature = createHmac("sha256", process.env.SESSION_SECRET!).update(otherEmail).digest("hex");
-    await otherContext.addCookies([{ name: "pepito_session", value: `${encoded}.${signature}`, url: baseURL, httpOnly: true, sameSite: "Lax" }]);
+    await otherContext.addCookies([{ name: "pepito_session", value: createSessionToken(company.ownerEmail, company.sessionVersion, process.env.SESSION_SECRET!), url: baseURL, httpOnly: true, sameSite: "Lax" }]);
     const denied = await otherPage.request.get(`${baseURL}/api/admin/delegation-risk`);
     expect(denied.status()).toBe(403);
     const deniedUpdate = await otherPage.request.patch(`${baseURL}/api/admin/delegation-risk`, {

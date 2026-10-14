@@ -1,10 +1,12 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { createHmac, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { config } from "dotenv";
+import { createSessionToken, SESSION_MAX_AGE_SECONDS } from "../src/lib/session-token";
+import { hashPassword } from "../src/lib/password";
 
 config({ quiet: true });
 
@@ -18,6 +20,7 @@ const GUARDED_ROUTES: Guarded[] = [
   { method: "POST", path: "/api/action-plan", denied: 401 },
   { method: "PATCH", path: "/api/action-plan/[id]", denied: 401 },
   { method: "POST", path: "/api/action-plan/[id]/launch", denied: 401 },
+  { method: "POST", path: "/api/auth/password", denied: 401 },
   { method: "DELETE", path: "/api/admin/companies/[id]", denied: 403 },
   { method: "GET", path: "/api/admin/delegation-risk", denied: 403 },
   { method: "PATCH", path: "/api/admin/delegation-risk", denied: 403 },
@@ -57,7 +60,7 @@ const GUARDED_ROUTES: Guarded[] = [
 // Routes volontairement accessibles sans session, avec la raison.
 const PUBLIC_ROUTES: Record<string, string> = {
   "/api/auth/login": "point d'entrée de la connexion",
-  "/api/auth/logout": "efface seulement le cookie de l'appelant",
+  "/api/auth/logout": "revoque les sessions et efface le cookie de l'appelant (POST même origine)",
   "/api/auth/signup": "inscription publique avec création explicite de compte",
   "/api/cron/weekly-review": "protégée par CRON_SECRET, pas par la session",
   "/api/health": "sonde publique sans donnée métier",
@@ -70,9 +73,12 @@ function requireSecret(): string {
   return process.env.SESSION_SECRET;
 }
 
-function sessionCookie(email: string, secret = requireSecret()): string {
-  const signature = createHmac("sha256", secret).update(email).digest("hex");
-  return `pepito_session=${Buffer.from(email).toString("base64url")}.${signature}`;
+function sessionCookie(email: string, sessionVersion = 0, now = Date.now(), secret = requireSecret()): string {
+  return `pepito_session=${createSessionToken(email, sessionVersion, secret, now)}`;
+}
+
+function sessionSignature(cookie: string): string {
+  return cookie.slice(cookie.indexOf("=") + 1).split(".")[1];
 }
 
 function openDatabase(): PrismaClient {
@@ -120,15 +126,15 @@ test("missing, unsigned and forged session cookies are refused everywhere", asyn
   test.setTimeout(60000);
   const victim = "victime@example.invalid";
   const attacker = "attaquant@example.invalid";
-  const encodedVictim = Buffer.from(victim).toString("base64url");
-  const attackerSignature = sessionCookie(attacker).split(".")[1];
+  const victimPayload = createSessionToken(victim, 0, requireSecret()).split(".")[0];
+  const attackerSignature = sessionSignature(sessionCookie(attacker));
   const forgeries: Record<string, string | undefined> = {
     "no cookie": undefined,
     "plain email, legacy cookie name": `pepito_session_email=${victim}`,
     "plain email": `pepito_session=${victim}`,
-    "payload without signature": `pepito_session=${encodedVictim}`,
-    "signed with another secret": sessionCookie(victim, "not-the-server-secret"),
-    "another account's signature on the victim's email": `pepito_session=${encodedVictim}.${attackerSignature}`,
+    "payload without signature": `pepito_session=${victimPayload}`,
+    "signed with another secret": sessionCookie(victim, 0, Date.now(), "not-the-server-secret"),
+    "another account's signature on the victim's email": `pepito_session=${victimPayload}.${attackerSignature}`,
     "truncated signature": sessionCookie(victim).slice(0, -1),
   };
   for (const [label, cookie] of Object.entries(forgeries)) {
@@ -161,6 +167,8 @@ test("login does not create unknown accounts; signup is explicit", async ({ requ
     const signup = await request.post(`${baseURL}/api/auth/signup`, { data: { email, password } });
     expect(signup.status()).toBe(201);
     expect(signup.headers()["set-cookie"]).toContain("pepito_session=");
+    expect(signup.headers()["set-cookie"].toLowerCase()).toContain("httponly");
+    expect(signup.headers()["set-cookie"].toLowerCase()).toContain("expires=");
     expect(await signup.json()).toMatchObject({ hasCompany: false });
     expect(await prisma.company.count({ where: { ownerEmail: email } })).toBe(1);
 
@@ -169,6 +177,47 @@ test("login does not create unknown accounts; signup is explicit", async ({ requ
     expect(await prisma.company.count({ where: { ownerEmail: email } })).toBe(1);
   } finally {
     await prisma.company.deleteMany({ where: { ownerEmail: email } });
+    await prisma.$disconnect();
+  }
+});
+
+test("sessions expire and logout or password changes revoke every active cookie", async ({ request }) => {
+  const prisma = openDatabase();
+  const email = `security-session-${randomUUID()}@example.invalid`;
+  const company = await prisma.company.create({ data: {
+    ownerEmail: email, passwordHash: await hashPassword("ancien-mot-de-passe"), name: "Session Test", trade: "Artisan", servingArea: "Paris",
+  } });
+  const firstSession = sessionCookie(email, company.sessionVersion);
+  const secondSession = sessionCookie(email, company.sessionVersion);
+  const expiredSession = sessionCookie(email, company.sessionVersion, Date.now() - (SESSION_MAX_AGE_SECONDS + 60) * 1000);
+  try {
+    expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: firstSession } })).status()).toBe(200);
+    expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: expiredSession } })).status()).toBe(401);
+
+    const passwordChange = await request.post(`${baseURL}/api/auth/password`, {
+      headers: { Cookie: firstSession, Origin: baseURL },
+      data: { currentPassword: "ancien-mot-de-passe", newPassword: "nouveau-mot-de-passe" },
+    });
+    expect(passwordChange.status()).toBe(200);
+    expect(await passwordChange.json()).toEqual({ passwordChanged: true, reconnectRequired: true });
+    for (const cookie of [firstSession, secondSession]) {
+      expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: cookie } })).status()).toBe(401);
+    }
+
+    const login = await request.post(`${baseURL}/api/auth/login`, { data: { email, password: "nouveau-mot-de-passe" } });
+    expect(login.status()).toBe(200);
+    const renewedCookie = login.headers()["set-cookie"].split(";")[0];
+    expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: renewedCookie } })).status()).toBe(200);
+
+    const forgedLogout = await request.post(`${baseURL}/api/auth/logout`, { headers: { Cookie: renewedCookie, Origin: "https://attacker.invalid" }, maxRedirects: 0 });
+    expect(forgedLogout.status()).toBe(403);
+    expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: renewedCookie } })).status()).toBe(200);
+    const logout = await request.post(`${baseURL}/api/auth/logout`, { headers: { Cookie: renewedCookie, Origin: baseURL }, maxRedirects: 0 });
+    expect(logout.status()).toBe(307);
+    expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: renewedCookie } })).status()).toBe(401);
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).sessionVersion).toBe(2);
+  } finally {
+    await prisma.company.delete({ where: { id: company.id } });
     await prisma.$disconnect();
   }
 });
@@ -214,7 +263,7 @@ test("a signed-in company cannot read or change another company's data", async (
     await prisma.auditFinding.create({ data: { companyId: target.id, category: "site_web", title: secretMarker, content: secretMarker } });
     await prisma.chatMessage.create({ data: { companyId: target.id, role: "assistant", content: secretMarker } });
 
-    const cookie = sessionCookie(intruder.ownerEmail);
+    const cookie = sessionCookie(intruder.ownerEmail, intruder.sessionVersion);
     const writes: [Pick<Guarded, "method" | "path">, unknown][] = [
       [{ method: "PATCH", path: `/api/proposals/${proposal.id}` }, { status: "rejetee" }],
       [{ method: "POST", path: `/api/proposals/${proposal.id}/execute` }, {}],
