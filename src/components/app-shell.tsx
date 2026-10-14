@@ -35,7 +35,10 @@ export function AppShell({
         <header className="border-b border-slate-200 bg-white px-4 py-3 md:hidden">
           <div className="flex flex-wrap items-center justify-between gap-3">
           <Link href="/dashboard" className="font-semibold">BienDecider</Link>
-          {companyName && <span className="max-w-[65%] truncate text-xs text-slate-500">{companyName}</span>}
+          <div className="flex min-w-0 items-center gap-3">
+            {companyName && <span className="max-w-28 truncate text-xs text-slate-500">{companyName}</span>}
+            <Link href="/dashboard?view=validation" className="inline-flex min-h-11 shrink-0 items-center rounded border border-indigo-200 px-3 text-sm font-medium text-indigo-700">À valider</Link>
+          </div>
           </div>
           <details className="mt-3">
             <summary className="cursor-pointer py-1 text-sm font-medium text-slate-600">Menu</summary>
