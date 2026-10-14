@@ -120,11 +120,24 @@ export function verifyMetaState(state: string | null | undefined, binding: State
   return expected.length === received.length && timingSafeEqual(expected, received);
 }
 
+/**
+ * Une app au cas d'usage « Gérer tout sur votre Page » passe par Facebook
+ * Login for Business : les permissions sont définies dans une configuration
+ * de la console Meta, transmise par config_id à la place de scope. Sans
+ * configuration (développement, CI), la liste des permissions reste envoyée.
+ * Dans les deux cas, les permissions accordées sont revérifiées au retour.
+ */
+function metaLoginConfigId() {
+  const configId = process.env.META_LOGIN_CONFIG_ID?.trim();
+  return configId && /^\d{1,32}$/.test(configId) ? configId : null;
+}
+
 export function buildMetaAuthUrl(redirectUri: string, state: string) {
   if (!isMetaOAuthConfigured()) throw new Error("Facebook non configuré.");
+  const configId = metaLoginConfigId();
   const params = new URLSearchParams({
-    client_id: process.env.META_APP_ID!, redirect_uri: redirectUri, state,
-    scope: FACEBOOK_SCOPES.join(","), response_type: "code",
+    client_id: process.env.META_APP_ID!, redirect_uri: redirectUri, state, response_type: "code",
+    ...(configId ? { config_id: configId } : { scope: FACEBOOK_SCOPES.join(",") }),
   });
   return `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth?${params}`;
 }

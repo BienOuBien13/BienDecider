@@ -68,6 +68,17 @@ test("Facebook auth asks only for Page permissions on the verified Graph version
   expect(url.searchParams.get("scope")?.split(",")).toEqual(["pages_show_list", "pages_read_engagement", "pages_manage_posts"]);
   expect(url.toString()).not.toContain(APP_SECRET);
   expect(url.toString()).not.toContain("instagram");
+  expect(url.searchParams.has("config_id")).toBe(false);
+
+  // Facebook Login for Business : la configuration Meta remplace la liste des permissions.
+  process.env.META_LOGIN_CONFIG_ID = "1978189152852667";
+  const business = new URL(buildMetaAuthUrl(callback, "test-state"));
+  expect(business.searchParams.get("config_id")).toBe("1978189152852667");
+  expect(business.searchParams.has("scope")).toBe(false);
+  expect(business.searchParams.get("response_type")).toBe("code");
+  process.env.META_LOGIN_CONFIG_ID = "not-an-id";
+  expect(new URL(buildMetaAuthUrl(callback, "test-state")).searchParams.has("config_id")).toBe(false);
+  delete process.env.META_LOGIN_CONFIG_ID;
 
   process.env.META_TOKEN_ENCRYPTION_KEY = "too-short";
   expect(isMetaOAuthConfigured()).toBe(false);

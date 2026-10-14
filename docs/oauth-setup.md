@@ -97,7 +97,7 @@ Sources : [scopes Gmail](https://developers.google.com/workspace/gmail/api/auth/
 
 ## 2. Meta (Facebook + Instagram)
 
-**Priorité externe pendant l'attente Google. Choix retenu : Facebook Login**, cohérent avec l'intégration déjà codée et le besoin Facebook + Instagram professionnel lié à une Page. Pas d'ajout d'Instagram Login en parallèle : les flux et permissions diffèrent. BienDecider sert plusieurs entreprises : scénario **Tech Provider**, **Advanced Access et App Review requis** pour les permissions concernées.
+**Priorité externe pendant l'attente Google. Choix retenu : Facebook Login for Business** (cas d'usage « Gérer tout sur votre Page »), cohérent avec l'intégration déjà codée et le besoin Facebook + Instagram professionnel lié à une Page. Pas d'ajout d'Instagram Login en parallèle : les flux et permissions diffèrent. BienDecider sert plusieurs entreprises : scénario **Tech Provider**, **Advanced Access et App Review requis** pour les permissions concernées.
 
 Préparer un Business Portfolio, relier l'app BienDecider et compléter la Business Verification selon les exigences du dashboard Meta. Préparer également identité légale, support testé, icône finale (1024 × 1024 pour le dossier), politique publique validée et procédure de suppression des données. Ne pas demander de permissions de publication avant de pouvoir démontrer leur usage réel de bout en bout : l'exécution n'est pas encore implémentée.
 
@@ -105,22 +105,26 @@ Source : [App Review Instagram](https://developers.facebook.com/documentation/in
 
 **Durée estimée : 1-2h de configuration, puis plusieurs jours à plusieurs semaines d'attente pour l'App Review — hors de notre contrôle.**
 
-1. Aller sur [developers.facebook.com](https://developers.facebook.com/) → **Mes apps → Créer une app** → type "Entreprise".
-2. Ajouter le produit **Facebook Login** (sidebar → Ajouter un produit).
-3. Dans **Facebook Login → Paramètres** : ajouter l'URI de redirection `https://www.biendecider.com/api/oauth/meta/callback`, exactement, sans barre finale. Nom public de l'app : BienDecider ; domaine : `biendecider.com` ; confidentialité : `https://www.biendecider.com/confidentialite`.
+App créée le 2026-10-14 : **ID de l'app `1118057380755668`**, cas d'usage « Gérer tout sur votre Page », configuration Facebook Login for Business **`1978189152852667`**. Ces identifiants sont publics ; la clé secrète ne doit jamais être écrite dans le dépôt ni dans un ticket.
+
+1. Aller sur [developers.facebook.com](https://developers.facebook.com/) → **Mes apps → Créer une app**, nom `BienDecider`, contact `contact@biendecider.com`, cas d'usage **« Gérer tout sur votre Page »** (*Manage everything on your Page*). Ce cas d'usage s'appuie sur **Facebook Login for Business** ; il est incompatible avec le cas d'usage Facebook Login classique, et un cas d'usage ne peut plus être retiré après création.
+2. **Tableau de bord → Personnaliser le cas d'usage** : ajouter `pages_manage_posts` et `pages_read_engagement` (`pages_show_list` est inclus).
+3. **Facebook Login for Business → Paramètres** : ajouter `https://www.biendecider.com/api/oauth/meta/callback` dans **URI de redirection OAuth valides** (exactement, sans barre finale), enregistrer, puis le contrôler avec le validateur. Connexion OAuth Web, HTTPS obligatoire et mode strict activés. **Configurations → Créer une configuration** : jeton d'accès utilisateur, éléments partagés : Pages, permissions `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`. Dans **Paramètres → Général** : domaine `biendecider.com`, confidentialité `https://www.biendecider.com/confidentialite`, conditions `https://www.biendecider.com/cgu`, instructions de suppression des données `https://www.biendecider.com/confidentialite`.
 4. Récupérer **App ID** et **App Secret** (menu Paramètres → Général), puis générer une clé de chiffrement dédiée aux jetons Facebook :
    ```
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
-   Saisir les trois valeurs dans **Vercel > bien-decider > Settings > Environment Variables > Production**, puis redéployer :
+   Saisir les valeurs dans **Vercel > bien-decider > Settings > Environment Variables > Production**, puis redéployer :
    ```
-   META_APP_ID="..."
+   META_APP_ID="1118057380755668"
+   META_LOGIN_CONFIG_ID="1978189152852667"
    META_APP_SECRET="..."
    META_TOKEN_ENCRYPTION_KEY="64 caractères hexadécimaux"
    ```
-   Sans les trois, le bouton « Autoriser Facebook » n'apparaît pas. Ne jamais réutiliser la clé d'un autre connecteur. Changer cette clé rend illisibles les connexions Facebook existantes : chaque dirigeant devra réautoriser sa Page.
+   `META_LOGIN_CONFIG_ID` fait envoyer l'identifiant de configuration (`config_id`) à la place de la liste des permissions, comme l'exige Facebook Login for Business ; sans lui, le code envoie `scope`, ce qui ne convient qu'aux apps Facebook Login classiques.
+   Sans `META_APP_ID`, `META_APP_SECRET` et `META_TOKEN_ENCRYPTION_KEY`, le bouton « Autoriser Facebook » n'apparaît pas. Ne jamais réutiliser la clé d'un autre connecteur. Changer cette clé rend illisibles les connexions Facebook existantes : chaque dirigeant devra réautoriser sa Page.
 5. **Mode développement** : tant que l'app n'est pas passée en App Review, seuls les comptes ayant un rôle sur l'app (admin, développeur, testeur — à ajouter dans Rôles de l'app) peuvent se connecter, et uniquement sur les Pages qu'ils gèrent. Suffisant pour tester vous-même et avec vos 5 entreprises pilotes *si vous les ajoutez comme testeurs*.
-6. **Permissions demandées par le code** (Facebook Login, Graph API v26.0, vérifiées dans la documentation Meta le 2026-10-13) : `pages_show_list` pour lister les Pages gérées, `pages_read_engagement` pour lire la Page choisie, `pages_manage_posts` pour y publier après validation. Aucune permission Instagram n'est demandée pour l'instant.
+6. **Permissions demandées** (configuration Facebook Login for Business, Graph API v26.0, vérifiées dans la documentation Meta le 2026-10-13) : `pages_show_list` pour lister les Pages gérées, `pages_read_engagement` pour lire la Page choisie, `pages_manage_posts` pour y publier après validation. Aucune permission Instagram n'est demandée pour l'instant.
 7. **Pour ouvrir à un client externe** (un compte sans rôle sur l'app) : demander ces trois permissions en **App Review** (menu *Vérification de l'app → Autorisations et fonctionnalités*). Il faut fournir :
    - Une démonstration vidéo du flux d'usage réel dans BienDecider, publication comprise : attendre que la publication soit livrée avant de soumettre.
    - Une politique de confidentialité publique (URL).
