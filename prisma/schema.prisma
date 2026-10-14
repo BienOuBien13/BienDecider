@@ -12,6 +12,7 @@ model Company {
   id              String    @id @default(cuid())
   ownerEmail      String    @unique // identifiant de session (login minimal, cf. docs/architecture-technique.md)
   passwordHash    String? // hash+sel (scrypt), jamais en clair — cf. src/lib/password.ts. Null = compte créé avant ce champ (accepte un premier mot de passe au prochain login).
+  sessionVersion  Int       @default(0)
   failedLoginAttempts Int @default(0) // anti-force-brute, cf. docs/backlog.md
   lockedUntil     DateTime? // compte verrouillé jusqu'à cette date après trop d'échecs
   name            String

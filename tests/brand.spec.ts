@@ -33,14 +33,19 @@ test("unknown pages offer a French return route on desktop and mobile", async ({
     await page.screenshot({ path: testInfo.outputPath(`not-found-${width}.png`), fullPage: true });
   }
   await page.getByRole("link", { name: "Retour à l'accueil", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "BienDecider", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /BienDecider prépare le travail/ })).toBeVisible();
 });
 
 test("BienDecider public identity, metadata, contact and responsive pages", async ({ page }, testInfo) => {
   await page.goto(baseURL);
   await expect(page).toHaveTitle("BienDecider");
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
-  await expect(page.getByRole("heading", { name: "BienDecider", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /BienDecider prépare le travail/ })).toBeVisible();
+  await expect(page.getByText("BienDecider", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Créer mon compte", exact: true })).toHaveAttribute("href", "/signup");
+  await expect(page.getByRole("link", { name: "J'ai déjà un compte", exact: true })).toHaveAttribute("href", "/login");
+  await expect(page.getByText("Exemple fictif, aucune donnée client")).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(/gratuit pendant le pilote/i);
   await expect(page.locator('meta[property="og:site_name"]')).toHaveAttribute("content", "BienDecider");
   await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute("content", "fr_FR");
   await expect(page.getByRole("link", { name: "Contact", exact: true })).toHaveAttribute("href", "mailto:contact@biendecider.com");

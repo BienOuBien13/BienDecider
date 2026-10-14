@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
   if (!company.passwordHash) {
     company = await prisma.company.update({
       where: { id: company.id },
-      data: { passwordHash: await hashPassword(password) },
+      data: { passwordHash: await hashPassword(password), sessionVersion: { increment: 1 } },
     });
   } else if (!(await verifyPassword(password, company.passwordHash))) {
     const attempts = company.failedLoginAttempts + 1;
