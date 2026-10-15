@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionEmail } from "@/lib/session";
 import { AppShell } from "@/components/app-shell";
+import { getPendingDecisionCount } from "@/lib/pending-decisions-server";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { computeBusinessTarget, formatEuros } from "@/lib/business-target";
 import { getFunnelStats } from "@/lib/funnel";
@@ -22,9 +23,10 @@ export default async function RapportPage() {
     getFunnelStats(company.id),
   ]);
   const target = computeBusinessTarget(company);
+  const pendingCount = await getPendingDecisionCount(company.id);
 
   return (
-    <AppShell companyName={company.name}>
+    <AppShell companyName={company.name} pendingCount={pendingCount}>
       <div className="mx-auto max-w-4xl">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-2xl font-semibold">Résultats</h1>

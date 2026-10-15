@@ -4,9 +4,11 @@ import { SidebarNav } from "@/components/sidebar-nav";
 /** Coque commune des pages connectées : barre latérale (parcours lisible) + contenu. */
 export function AppShell({
   companyName,
+  pendingCount = 0,
   children,
 }: {
   companyName?: string;
+  pendingCount?: number;
   children: React.ReactNode;
 }) {
   return (
@@ -19,7 +21,7 @@ export function AppShell({
             <span className="block truncate text-xs text-slate-500">{companyName}</span>
           )}
         </Link>
-        <SidebarNav />
+        <SidebarNav pendingCount={pendingCount} />
         <form action="/api/auth/logout" method="post" className="mt-auto px-3 pt-6">
           <button type="submit" className="min-h-11 text-sm text-slate-600 hover:text-slate-900">
             Déconnexion
@@ -38,12 +40,16 @@ export function AppShell({
           <Link href="/dashboard" className="font-semibold">BienDecider</Link>
           <div className="flex min-w-0 items-center gap-3">
             {companyName && <span className="max-w-28 truncate text-xs text-slate-500">{companyName}</span>}
-            <Link href="/dashboard?view=validation" className="inline-flex min-h-11 shrink-0 items-center rounded border border-indigo-200 px-3 text-sm font-medium text-indigo-700">À valider</Link>
+            <Link href="/dashboard?view=validation" aria-describedby={pendingCount > 0 ? "pending-description" : undefined} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded border border-indigo-200 px-3 text-sm font-medium text-indigo-700">
+              À valider
+              {pendingCount > 0 && <span aria-hidden="true" className="rounded-full bg-indigo-700 px-2 text-xs font-semibold text-white">{pendingCount}</span>}
+            </Link>
+            {pendingCount > 0 && <span id="pending-description" className="sr-only">{pendingCount} production(s) attendent votre décision</span>}
           </div>
           </div>
           <details className="mt-3">
             <summary className="flex min-h-11 cursor-pointer items-center py-1 text-sm font-medium text-slate-700">Menu</summary>
-            <SidebarNav />
+            <SidebarNav pendingCount={pendingCount} />
             <form action="/api/auth/logout" method="post" className="px-3 py-4"><button className="min-h-11 text-sm text-slate-700">Déconnexion</button></form>
           </details>
         </header>

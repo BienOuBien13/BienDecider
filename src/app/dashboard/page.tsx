@@ -6,6 +6,7 @@ import { omitPasswordHash } from "@/lib/safe-company";
 import { DashboardClient } from "./dashboard-client";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 import { facebookConnectionView } from "@/lib/oauth/meta";
+import { countPendingDecisions } from "@/lib/pending-decisions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +52,7 @@ export default async function DashboardPage({ searchParams }: {
   const facebookPageName = facebook.status === "connected" ? facebook.pageName : null;
 
   return (
-    <AppShell companyName={company.name}>
+    <AppShell companyName={company.name} pendingCount={countPendingDecisions(proposals, facebookPageName)}>
       <DashboardClient
         company={omitPasswordHash(company)}
         initialPlanItems={planItems}

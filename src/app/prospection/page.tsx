@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionEmail } from "@/lib/session";
 import { AppShell } from "@/components/app-shell";
+import { getPendingDecisionCount } from "@/lib/pending-decisions-server";
 import { isOutreachSendingConfigured } from "@/lib/outreach";
 import { ProspectionClient } from "./prospection-client";
 
@@ -18,9 +19,10 @@ export default async function ProspectionPage() {
     where: { companyId: company.id, stage: { notIn: ["propose", "ecarte"] } },
     orderBy: { updatedAt: "desc" },
   });
+  const pendingCount = await getPendingDecisionCount(company.id);
 
   return (
-    <AppShell companyName={company.name}>
+    <AppShell companyName={company.name} pendingCount={pendingCount}>
       <ProspectionClient
         initialLeads={leads}
         initialAutoOutreach={company.autoOutreachEnabled}
