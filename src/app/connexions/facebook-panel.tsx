@@ -64,7 +64,7 @@ export function FacebookPanel({ configured, view }: { configured: boolean; view:
           <p className="mt-1 text-sm text-slate-600">{labels[view.status]}</p>
           {view.status === "connected" && <p className="mt-1 break-words text-sm font-medium">{view.pageName}</p>}
           {(view.status === "connected" || view.status === "selection") && <p className="mt-1 break-words text-xs text-slate-500">Autorisé par {view.userName}</p>}
-          <p className="mt-2 text-xs text-slate-600">{CHANNEL_CAPABILITIES.facebook.nextStep} {CHANNEL_CAPABILITIES.instagram.availability}</p>
+          <p className="mt-2 text-xs text-slate-600">{CHANNEL_CAPABILITIES.facebook.nextStep} {CHANNEL_CAPABILITIES.instagram.label} : {CHANNEL_CAPABILITIES.instagram.availability.charAt(0).toLowerCase() + CHANNEL_CAPABILITIES.instagram.availability.slice(1)}</p>
           {!configured && <p className="mt-2 text-xs text-amber-700">La liaison Facebook n&apos;est pas disponible sur cette version.</p>}
         </div>
         {configured && <a href="/api/oauth/meta/start" className="rounded bg-black px-3 py-2 text-sm text-white">{view.status === "disconnected" ? "Autoriser Facebook" : "Réautoriser Facebook"}</a>}
