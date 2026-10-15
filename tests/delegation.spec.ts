@@ -6,6 +6,7 @@ import { getApprovalConsequence } from "../src/lib/channel-capabilities";
 import { proposalStatusView } from "../src/lib/proposal-status";
 import { countByFilter, groupQueue, UNATTACHED_GROUP_TITLE } from "../src/lib/validation-queue";
 import { countPendingDecisions, needsAttention } from "../src/lib/pending-decisions";
+import { describeRunProgress, finishedRunMessage, formatDuration, recentSucceededRuns, runResultHref } from "../src/lib/agent-run-progress";
 
 test("risk rules use registered kinds and contextual factors, then fail closed", () => {
   expect(assessActionRisk("piste_croissance").level).toBe("modere");
@@ -133,4 +134,39 @@ test("pending decisions count what waits for the owner, and a manual-only approv
   expect(needsAttention(p("executee", "site_web_content"), "Page")).toBe(false);
   expect(countPendingDecisions([p("en_attente"), p("validee"), p("validee", "site_web_content"), p("rejetee")], null)).toBe(2);
   expect(countPendingDecisions([], "Page")).toBe(0);
+});
+
+test("run progress gives indicative steps from elapsed time, flags overruns and announces the end per agent", () => {
+  const t0 = Date.parse("2026-10-15T10:00:00Z");
+  const queued = { id: "r", agent: "contenu", planItemId: null, status: "queued", attempts: 0, maxDurationSeconds: 60, queuedAt: new Date(t0).toISOString(), startedAt: null, finishedAt: null, resultCount: 0, errorMessage: null };
+  const running = { ...queued, status: "running", startedAt: new Date(t0).toISOString() };
+  const states = (progress: ReturnType<typeof describeRunProgress>) => progress.steps.map((step) => step.state);
+
+  const waiting = describeRunProgress(queued, t0 + 5000);
+  expect(waiting.headline).toBe("Dans la file");
+  expect(states(waiting)).toEqual(["todo", "todo"]);
+  expect(waiting.hint).toBe("En attente de démarrage.");
+
+  const early = describeRunProgress(running, t0 + 5000);
+  expect(states(early)).toEqual(["active", "todo"]);
+  expect(early.hint).toBe("Durée habituelle : environ 30 s.");
+  expect(states(describeRunProgress(running, t0 + 20000))).toEqual(["done", "active"]);
+
+  const late = describeRunProgress(running, t0 + 50000);
+  expect(late.overrun).toBe(true);
+  expect(states(late)).toEqual(["done", "active"]);
+  expect(late.hint).toContain("60 s");
+  expect(describeRunProgress({ ...running, agent: "inconnu" }, t0 + 5000).steps).toHaveLength(1);
+  expect(describeRunProgress(running, t0 - 5000).elapsedSeconds).toBe(0);
+
+  expect(formatDuration(8)).toBe("8 s");
+  expect(formatDuration(75)).toBe("1 min 15 s");
+  expect(finishedRunMessage({ agent: "contenu", resultCount: 3 })).toBe("Camille a terminé : 3 élément(s) à examiner.");
+  expect(finishedRunMessage({ agent: "contenu", resultCount: 0 })).toBe("Camille a terminé : rien de nouveau à examiner.");
+  expect(finishedRunMessage({ agent: "co_ceo", resultCount: 4 })).toContain("le plan est prêt");
+  expect(runResultHref({ agent: "co_ceo" })).toBe("/dashboard?view=plan");
+  expect(runResultHref({ agent: "contenu" })).toBe("/dashboard?view=validation");
+
+  const done = (id: string, minutesAgo: number) => ({ ...running, id, status: "succeeded", finishedAt: new Date(t0 - minutesAgo * 60_000).toISOString() });
+  expect(recentSucceededRuns([done("a", 5), done("b", 120), running, { ...done("c", 1), status: "failed" }], t0).map((run) => run.id)).toEqual(["a"]);
 });
