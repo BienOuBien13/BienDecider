@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { AgentProposal, ChatMessage, ActionPlanItem } from "@prisma/client";
+import type { AgentProposal, ActionPlanItem } from "@prisma/client";
 import type { AgentRunView } from "@/lib/agent-run-types";
-import { waitForAgentRun } from "@/lib/agent-runs-client";
+import { AgentRunTracker, useAgentRunMonitor } from "@/components/agent-run-tracker";
+import { finishedRunMessage } from "@/lib/agent-run-progress";
 import type { SafeCompany } from "@/lib/safe-company";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
@@ -15,16 +16,17 @@ import { useAgentProfileCompletion } from "@/components/agent-profile-completion
 import { describeProgress, summarizeProposals } from "@/lib/proposal-progress";
 import { countByFilter, FILTER_LABELS, groupQueue, type QueueFilter } from "@/lib/validation-queue";
 import { needsAttention } from "@/lib/pending-decisions";
+import { openPaul } from "@/lib/paul-context";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
 
-export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
+export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialProposals, leadSources, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
   company: SafeCompany;
   initialPlanItems: PlanItemWithProposals[];
   initialAgentRuns: AgentRunView[];
-  initialChatMessages: ChatMessage[];
   initialProposals: AgentProposal[];
+  leadSources: Record<string, string | null>;
   initialDiagnosticCount: number;
   initialView: View;
   riskSettings: Record<string, string>;
@@ -35,9 +37,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const [planItems, setPlanItems] = useState(initialPlanItems);
   const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
   const [proposals, setProposals] = useState(initialProposals);
-  const [chatMessages, setChatMessages] = useState(initialChatMessages);
-  const [chatInput, setChatInput] = useState("");
-  const [chatSending, setChatSending] = useState(false);
+  const [currentLeadSources, setLeadSources] = useState(leadSources);
   const [planLoading, setPlanLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +48,15 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const [discardReason, setDiscardReason] = useState("");
   const [decidedIds, setDecidedIds] = useState<string[]>([]);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const monitorRun = useAgentRunMonitor(initialAgentRuns, {
+    onUpdate: (run) => setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 20)),
+    onFinished: async (finished) => {
+      await refresh();
+      if (finished.status === "failed") setError(finished.errorMessage ?? "L'agent a échoué. Vous pouvez relancer l'action.");
+      else setNotice(finishedRunMessage(finished));
+    },
+    onError: reportError,
+  });
 
   async function refresh() {
     const [planResponse, proposalResponse, runsResponse] = await Promise.all([
@@ -115,18 +124,6 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     finally { setBusyId(null); }
   }
 
-  async function monitorRun(runId: string) {
-    try {
-      const finished = await waitForAgentRun(runId, (run) => {
-        setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 20));
-      });
-      if (!finished) return;
-      await refresh();
-      if (finished.status === "failed") setError(finished.errorMessage ?? "L'agent a échoué. Vous pouvez relancer l'action.");
-      else setNotice(finished.agent === "co_ceo" ? "Le plan de Paul est prêt." : `${finished.resultCount} élément(s) produit(s).`);
-    } catch (error) { reportError(error); }
-  }
-
   async function checkRun(runId: string) {
     try {
       const { run } = await request(`/api/agent-runs/${encodeURIComponent(runId)}`, "GET");
@@ -185,11 +182,11 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     finally { setBusyId(null); }
   }
 
-  async function handleExecute(proposalId: string, expectedVersion: number, confirmed: true) {
+  async function handleExecute(proposalId: string, expectedVersion: number, confirmed: true, acknowledgedReviewIds: string[]) {
     setBusyId(proposalId);
     setError(null);
     try {
-      const result = await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion, confirmed });
+      const result = await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion, confirmed, acknowledgedReviewIds });
       setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
       setNotice(result?.message ?? "Publication effectuée. Elle figure dans les résultats.");
@@ -201,6 +198,22 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     finally { setBusyId(null); }
   }
 
+  async function handleSetLeadSource(proposalId: string, source: string): Promise<boolean> {
+    setBusyId(proposalId);
+    setError(null);
+    try {
+      await request(`/api/proposals/${proposalId}`, "PATCH", { leadSource: source });
+      setLeadSources((previous) => ({ ...previous, [proposalId]: source }));
+      setNotice("Source enregistrée. Vérifiez vous-même qu'elle correspond à l'organisation.");
+      return true;
+    } catch (error) {
+      reportError(error);
+      return false;
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleSaveDirection() {
     setDirectionSaving(true);
     setError(null);
@@ -209,25 +222,6 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       setNotice("Consigne enregistrée pour les prochaines actions.");
     } catch (error) { reportError(error); }
     finally { setDirectionSaving(false); }
-  }
-
-  async function handleSendChat(event: React.FormEvent) {
-    event.preventDefault();
-    if (!chatInput.trim() || chatSending) return;
-    const userText = chatInput;
-    setChatSending(true);
-    setError(null);
-    try {
-      const { reply } = await request("/api/co-ceo/message", "POST", { companyId: company.id, message: userText });
-      setChatInput("");
-      setChatMessages((previous) => [
-        ...previous,
-        { id: `tmp-${Date.now()}`, companyId: company.id, role: "user", content: userText, createdAt: new Date() },
-        { id: `tmp-${Date.now()}-a`, companyId: company.id, role: "assistant", content: reply, createdAt: new Date() },
-      ]);
-      await refresh();
-    } catch (error) { reportError(error); }
-    finally { setChatSending(false); }
   }
 
   const activeItems = planItems.filter((item) => item.status !== "ecarte" && item.status !== "termine");
@@ -242,7 +236,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const needsFirstDiagnostic = initialDiagnosticCount === 0 && planItems.length === 0;
   const emptyNextHref = needsFirstDiagnostic ? "/diagnostic" : "/dashboard?view=plan";
   const emptyNextLabel = needsFirstDiagnostic ? "Commencer par le diagnostic" : activeItems.length > 0 ? "Voir les actions du plan" : "Revenir au plan d'action";
-  const locked = busyId !== null || planLoading || chatSending;
+  const locked = busyId !== null || planLoading;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -287,19 +281,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       )}
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-      {agentRuns.some((run) => run.status === "queued" || run.status === "running" || run.status === "failed") && <section className="mt-4 border-b border-slate-200 pb-4" aria-label="Exécutions récentes">
-        <h2 className="text-sm font-medium">Exécutions récentes</h2>
-        <ul className="mt-2 space-y-2 text-sm">
-          {agentRuns.filter((run) => run.status === "queued" || run.status === "running" || run.status === "failed").slice(0, 5).map((run) => (
-            <li key={run.id} className="flex flex-wrap items-center justify-between gap-2">
-              <span>{PERSONAS[run.agent as AgentKey]?.name ?? run.agent}: {run.status === "queued" ? "Dans la file" : run.status === "running" ? "En cours" : run.errorMessage ?? "Échec, relançable"}</span>
-              {run.status === "failed" && run.agent === "co_ceo"
-                ? <button onClick={() => void handleRetryPlanGeneration()} disabled={planLoading} className="text-indigo-600 underline disabled:opacity-50">Relancer Paul</button>
-                : (run.status === "queued" || run.status === "running") && <button onClick={() => void checkRun(run.id)} className="text-indigo-600 underline">Vérifier</button>}
-            </li>
-          ))}
-        </ul>
-      </section>}
+      <AgentRunTracker runs={agentRuns} onCheck={(runId) => void checkRun(runId)} onRetry={() => void handleRetryPlanGeneration()} retryDisabled={planLoading} />
       <nav aria-label="Actions" className="mt-6 flex flex-wrap gap-x-6 border-b border-slate-200">
         {([
           ["plan", "Plan d'action", activeItems.length],
@@ -394,7 +376,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <section key={group.key} aria-labelledby={`group-${group.key}`} className="space-y-3">
               <h2 id={`group-${group.key}`} className="text-sm font-semibold text-slate-800">{group.title} <span className="font-normal text-slate-600">({group.items.length})</span></h2>
               {group.items.map((proposal) => (
-                <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
+                <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} onSetLeadSource={handleSetLeadSource} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} companyPhone={company.phone} companyCertifications={company.certifications} leadSource={currentLeadSources[proposal.id]} />
               ))}
             </section>
           ))}
@@ -427,15 +409,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
           </section>
           <section className="min-w-0">
             <h2 className="text-sm font-medium">Conversation avec {PERSONAS.co_ceo.name}</h2>
-            <div role="log" aria-label="Conversation" className="mt-2 max-h-80 space-y-3 overflow-y-auto py-2">
-              {chatMessages.length === 0 && <p className="text-sm text-slate-500">Aucun échange pour le moment.</p>}
-              {chatMessages.map((message) => <p key={message.id} className={`whitespace-pre-wrap break-words text-sm ${message.role === "user" ? "text-indigo-700" : "text-slate-600"}`}><span className="block text-xs font-medium">{message.role === "user" ? "Vous" : PERSONAS.co_ceo.name}</span>{message.content}</p>)}
-              {chatSending && <p className="text-sm text-slate-500">Paul réfléchit…</p>}
-            </div>
-            <form onSubmit={handleSendChat} className="mt-3 flex gap-2">
-              <input aria-label="Message à Paul" placeholder="Écrire à Paul…" value={chatInput} onChange={(event) => setChatInput(event.target.value)} className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm" />
-              <button type="submit" disabled={locked || !chatInput.trim()} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50">Envoyer</button>
-            </form>
+            <p className="mt-2 text-sm text-slate-600">{PERSONAS.co_ceo.name} est disponible sur chaque page avec le bouton « Parler à {PERSONAS.co_ceo.name} ». La conversation et votre brouillon sont conservés d&apos;une page à l&apos;autre.</p>
+            <button type="button" onClick={() => openPaul()} className="mt-2 min-h-11 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">Ouvrir la discussion</button>
           </section>
         </div>
       </details>

@@ -341,6 +341,78 @@ test("a site is published only from its approved version", async ({ page, compan
   }
 });
 
+test("critical content checks cannot be bypassed by a generic publish confirmation", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    await prisma.company.update({ where: { id: company.id }, data: { certifications: null } });
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Certification à vérifier", content: "Entreprise certifiée RGE.", status: "validee", approvedVersion: 1,
+    } });
+    const execute = (data: unknown) => page.request.post(`${baseURL}/api/proposals/${proposal.id}/execute`, { headers: { Origin: baseURL }, data });
+    const genericConfirmation = await execute({ expectedVersion: 1, confirmed: true });
+    expect(genericConfirmation.status()).toBe(409);
+    expect((await genericConfirmation.json()).error).toContain("Certification non étayée");
+    const forgedAcknowledgement = await execute({ expectedVersion: 1, confirmed: true, acknowledgedReviewIds: ["certification_unsupported"] });
+    expect(forgedAcknowledgement.status()).toBe(409);
+    expect(await prisma.executionLog.count({ where: { proposalId: proposal.id } })).toBe(0);
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).siteHtml).toBeNull();
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("publication sends human review acknowledgements for the approved content version", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Tarifs à confirmer", content: "Nos tarifs sont attractifs.", status: "validee", approvedVersion: 1,
+    } });
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const card = page.locator("article").filter({ hasText: proposal.title });
+    await expect(card.getByText("Prix évoqué sans montant vérifiable", { exact: true })).toBeVisible();
+    await card.getByRole("button", { name: "Publier le site" }).click();
+    const confirm = card.getByRole("button", { name: "Confirmer la mise en ligne" });
+    await expect(confirm).toBeDisabled();
+    await card.getByRole("checkbox", { name: /J'ai vérifié ce point pour cette version/ }).check();
+    await expect(confirm).toBeEnabled();
+    await page.route(`**/api/proposals/${proposal.id}/execute`, async (route) => {
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: 1, confirmed: true, acknowledgedReviewIds: ["price_not_specified"] });
+      await route.fulfill({ json: { url: "/site/test" } });
+    });
+    await confirm.click();
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("a prospect without a public source cannot be added to the follow-up funnel", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "demarchage", kind: "prospect", title: "Association locale", content: "Organisation à vérifier.",
+    } });
+    const lead = await prisma.lead.create({ data: {
+      companyId: company.id, proposalId: proposal.id, name: proposal.title, reason: "Correspond au segment", source: null,
+    } });
+    const decide = (data: unknown) => page.request.patch(`${baseURL}/api/proposals/${proposal.id}`, { data });
+    const missingSource = await decide({ status: "validee", expectedVersion: 1 });
+    expect(missingSource.status()).toBe(409);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("propose");
+    expect((await page.request.patch(`${baseURL}/api/proposals/${proposal.id}`, { data: { leadSource: "http://localhost/private" } })).status()).toBe(400);
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const card = page.locator("article").filter({ hasText: proposal.title });
+    await expect(card.getByLabel("URL de la source")).toBeVisible();
+    await card.getByLabel("URL de la source").fill("https://example.org/association");
+    await card.getByRole("button", { name: "Enregistrer la source" }).click();
+    await expect(card.getByLabel("URL de la source")).toHaveValue("https://example.org/association");
+    await card.getByRole("button", { name: "Valider", exact: true }).click();
+    await expect(card.getByText("Approuvée", { exact: true })).toBeVisible();
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("a_contacter");
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 test("single validation queue, persistent decisions, publishing and error recovery", async ({ page, company }, testInfo) => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
   try {
@@ -403,7 +475,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(page.getByRole("link", { name: "Productions à valider 1", exact: true }).first()).toBeVisible();
     const site = await prisma.agentProposal.findFirstOrThrow({ where: { companyId: company.id, kind: "site_web_content" } });
     await page.route(`**/api/proposals/${site.id}/execute`, async (route) => {
-      expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true });
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true, acknowledgedReviewIds: [] });
       await prisma.agentProposal.update({ where: { id: site.id }, data: { status: "executee" } });
       await route.fulfill({ json: { url: "/site/test" } });
     });
@@ -681,6 +753,202 @@ test("guided onboarding starts with three fields and keeps the full company page
     await expect(page.getByPlaceholder("CA mensuel actuel (€)")).toBeVisible();
     await expect(page.getByPlaceholder("Téléphone affiché aux clients (optionnel)")).toBeVisible();
     await expect(page.getByRole("region", { name: "Démarrer en une phrase" })).toHaveCount(0);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("a prospect is verified, a message is prepared and copied without contact, then the real contact is declared, corrected, deferred or discarded", async ({ page, company, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const DAY = 24 * 60 * 60 * 1000;
+  const dayAgo = (days: number) => new Date(Date.now() - days * DAY).toISOString().slice(0, 10);
+  const display = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
+  try {
+    const base = { companyId: company.id, stage: "a_contacter", reason: "Organise des événements de quartier" };
+    const bare = await prisma.lead.create({ data: { ...base, name: "Association Sans Contact", createdAt: new Date(Date.now() - 3 * DAY) } });
+    const usable = await prisma.lead.create({ data: { ...base, name: "Association Complète", publicContact: "Formulaire sur asso.example", source: "https://asso.example/contact", segment: "associations" } });
+    const reload = (id: string) => prisma.lead.findUniqueOrThrow({ where: { id } });
+
+    await page.goto(`${baseURL}/prospection`);
+    const next = page.getByRole("region", { name: "Prochain prospect à traiter" });
+    await expect(next.getByText("Association Complète")).toBeVisible();
+    await expect(next.getByRole("link", { name: "source" })).toBeVisible();
+    const nextBox = await next.boundingBox();
+    const automationBox = await page.getByText("Prise de contact automatique").first().boundingBox();
+    expect(nextBox!.y).toBeLessThan(automationBox!.y);
+
+    await next.getByRole("button", { name: "Préparer un message" }).click();
+    await expect(next.getByLabel(/Message préparé/)).toHaveValue(/Association Complète/);
+    expect(await next.getByLabel(/Message préparé/).inputValue()).not.toMatch(/@/);
+    await next.getByRole("button", { name: "Copier le message" }).click();
+    await expect(next.getByRole("status")).toContainText("Rien n'a été envoyé");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Association Complète");
+    expect(await reload(usable.id)).toMatchObject({ stage: "a_contacter", contactedAt: null });
+
+    const first = dayAgo(2);
+    await next.getByRole("button", { name: "J'ai pris contact" }).click();
+    await next.getByLabel("Date du contact").fill(first);
+    await next.getByRole("button", { name: "Enregistrer le contact" }).click();
+    await expect(page.getByText(`Contact déclaré le ${display(first)}.`)).toBeVisible();
+    expect(await reload(usable.id)).toMatchObject({ stage: "contacte" });
+    expect((await reload(usable.id)).contactedAt!.toISOString().slice(0, 10)).toBe(first);
+
+    const corrected = dayAgo(3);
+    const contactedCard = page.locator("li").filter({ hasText: "Association Complète" });
+    await contactedCard.getByRole("button", { name: "Modifier la date du contact" }).click();
+    await contactedCard.getByLabel("Date du contact").fill(corrected);
+    await contactedCard.getByRole("button", { name: "Enregistrer la date" }).click();
+    await expect(page.getByText(`Contact déclaré le ${display(corrected)}.`)).toBeVisible();
+    await contactedCard.getByRole("button", { name: "Ce n'était pas un contact" }).click();
+    await expect(next.getByText("Association Complète")).toBeVisible();
+    expect(await reload(usable.id)).toMatchObject({ stage: "a_contacter", contactedAt: null });
+
+    await next.getByRole("button", { name: "Différer", exact: true }).click();
+    await expect(next.getByRole("button", { name: "Différer ce prospect" })).toBeDisabled();
+    await next.getByLabel(/Raison du report/).fill("Salon la semaine prochaine");
+    await next.getByRole("button", { name: "Différer ce prospect" }).click();
+    await expect(next.getByText("Association Sans Contact")).toBeVisible();
+    expect(await reload(usable.id)).toMatchObject({ statusReason: "Salon la semaine prochaine" });
+    expect((await reload(usable.id)).deferredUntil).not.toBeNull();
+
+    await next.getByRole("button", { name: "Écarter", exact: true }).click();
+    await expect(next.getByRole("button", { name: "Écarter ce prospect" })).toBeDisabled();
+    await next.getByLabel(/Raison de l'écart/).fill("Hors zone");
+    await next.getByRole("button", { name: "Écarter ce prospect" }).click();
+    await expect(next).toHaveCount(0);
+    expect(await reload(bare.id)).toMatchObject({ stage: "ecarte", statusReason: "Hors zone" });
+    await page.getByText(/^Écartés \(1\)/).click();
+    await page.getByRole("button", { name: "Reprendre ce prospect" }).click();
+    await expect.poll(async () => (await reload(bare.id)).stage).toBe("a_contacter");
+    expect((await reload(bare.id)).statusReason).toBeNull();
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("the prospect follow-up API refuses invented progress, future contacts and unexplained discards", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const DAY = 24 * 60 * 60 * 1000;
+  const day = (offset: number) => new Date(Date.now() + offset * DAY).toISOString().slice(0, 10);
+  try {
+    const lead = await prisma.lead.create({ data: { companyId: company.id, name: "Association A", reason: "Cible locale", stage: "a_contacter" } });
+    const pending = await prisma.lead.create({ data: { companyId: company.id, name: "Association B", reason: "Cible locale", stage: "propose" } });
+    const patch = (id: string, data: object) => page.request.patch(`${baseURL}/api/leads/${id}`, { data });
+    await page.goto(`${baseURL}/prospection`);
+
+    expect((await patch(lead.id, { stage: "gagne" })).status()).toBe(409);
+    expect((await patch(lead.id, { stage: "perdu" })).status()).toBe(409);
+    expect((await patch(lead.id, { stage: "ecarte" })).status()).toBe(400);
+    expect((await patch(lead.id, { stage: "contacte", contactedAt: day(5) })).status()).toBe(400);
+    expect((await patch(lead.id, { stage: "contacte", contactedAt: "2026-13-45" })).status()).toBe(400);
+    expect((await patch(lead.id, { deferUntil: day(-2), reason: "Trop tôt" })).status()).toBe(400);
+    expect((await patch(lead.id, { deferUntil: day(7) })).status()).toBe(400);
+    expect((await patch(lead.id, { contactedAt: day(-1) })).status()).toBe(409);
+    expect((await patch(pending.id, { stage: "contacte" })).status()).toBe(409);
+    expect(await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).toMatchObject({ stage: "a_contacter", contactedAt: null, deferredUntil: null, statusReason: null });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: pending.id } })).stage).toBe("propose");
+
+    expect((await patch(lead.id, { stage: "contacte", contactedAt: day(-1) })).status()).toBe(200);
+    expect((await patch(lead.id, { stage: "ecarte", reason: "Hors zone" })).status()).toBe(409);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("Paul is reachable from any page, keeps the conversation and the draft, and knows the page and the consulted element", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    await prisma.chatMessage.createMany({ data: [
+      { companyId: company.id, role: "user", content: "Bonjour Paul", createdAt: new Date(Date.now() - 60_000) },
+      { companyId: company.id, role: "assistant", content: "Bonjour, que puis-je faire ?", createdAt: new Date(Date.now() - 30_000) },
+    ] });
+    const proposal = await prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post du lundi", content: "Texte du post" } });
+    const finding = await prisma.auditFinding.create({ data: { companyId: company.id, category: "site_web", title: "Constat mobile", content: "Résumé du constat" } });
+    const lead = await prisma.lead.create({ data: { companyId: company.id, name: "Association suivie", reason: "Cible locale", stage: "a_contacter" } });
+    const sent: Array<{ message: string; context: { path: string; view?: string; element?: { type: string; id: string } } }> = [];
+    await page.route("**/api/co-ceo/message", async (route) => {
+      sent.push(route.request().postDataJSON());
+      await route.fulfill({ json: {
+        reply: `Voici l'explication. [[bd:proposal:${proposal.id}]] [[bd:finding:${finding.id}]] [[bd:lead:${lead.id}]]`,
+        references: [
+          { marker: `[[bd:proposal:${proposal.id}]]`, type: "proposal", id: proposal.id, label: "Post du lundi", href: `/dashboard?proposal=${proposal.id}#proposal-${proposal.id}` },
+          { marker: `[[bd:finding:${finding.id}]]`, type: "finding", id: finding.id, label: "Constat mobile", href: `/diagnostic#finding-${finding.id}` },
+          { marker: `[[bd:lead:${lead.id}]]`, type: "lead", id: lead.id, label: "Association suivie", href: `/prospection#lead-${lead.id}` },
+        ],
+      } });
+    });
+
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const toggle = page.getByRole("button", { name: "Parler à Paul" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "Demander à Paul" }).first().click();
+    const panel = page.getByRole("dialog", { name: "Discussion avec Paul" });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText("Bonjour Paul")).toBeVisible();
+    await expect(panel.getByText(/sait que vous êtes sur : Productions à valider/)).toBeVisible();
+    await expect(panel.getByText("À propos de : production « Post du lundi »")).toBeVisible();
+
+    await panel.getByLabel("Message à Paul").fill("Explique-moi ça");
+    await panel.getByRole("button", { name: "Envoyer" }).click();
+    await expect(panel.getByText("Voici l'explication.")).toBeVisible();
+    const proposalLink = panel.getByRole("link", { name: "Post du lundi" });
+    await expect(proposalLink).toHaveAttribute("href", `/dashboard?proposal=${proposal.id}#proposal-${proposal.id}`);
+    await expect(panel.getByRole("link", { name: "Constat mobile" })).toHaveAttribute("href", `/diagnostic#finding-${finding.id}`);
+    await expect(panel.getByRole("link", { name: "Association suivie" })).toHaveAttribute("href", `/prospection#lead-${lead.id}`);
+    await proposalLink.click();
+    await expect(page).toHaveURL(new RegExp(`proposal=${proposal.id}`));
+    await expect(panel).toBeVisible();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].message).toBe("Explique-moi ça");
+    expect(sent[0].context).toEqual({ path: "/dashboard", view: "validation", element: { type: "proposal", id: proposal.id } });
+
+    await panel.getByLabel("Message à Paul").fill("Une autre question");
+    await page.goto(`${baseURL}/prospection`);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(panel.getByLabel("Message à Paul")).toHaveValue("Une autre question");
+    await expect(panel.getByText("Bonjour Paul")).toBeVisible();
+    await expect(panel.getByText(/sait que vous êtes sur : Prospection/)).toBeVisible();
+    await expect(panel.getByText(/À propos de/)).toHaveCount(0);
+
+    await panel.getByLabel("Message à Paul").press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(toggle).toBeFocused();
+    await page.reload();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("a running agent shows indicative steps, is followed again after leaving the page, and its end is announced", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const seeded = await prisma.agentRun.create({ data: {
+      companyId: company.id, agent: "contenu", requestKey: `seed-${randomUUID()}`, activeDedupeKey: `seed-${randomUUID()}`,
+      payload: { kind: "direct", agent: "contenu" }, status: "running", startedAt: new Date(Date.now() - 5000), attempts: 1,
+    } });
+    const view = { id: seeded.id, agent: "contenu", planItemId: null, attempts: 1, maxDurationSeconds: 60, queuedAt: seeded.queuedAt.toISOString(), startedAt: seeded.startedAt!.toISOString(), errorMessage: null };
+    let finished = false;
+    await page.route(`**/api/agent-runs/${seeded.id}`, (route) => route.fulfill({ json: { run: finished
+      ? { ...view, status: "succeeded", finishedAt: new Date().toISOString(), resultCount: 3 }
+      : { ...view, status: "running", finishedAt: null, resultCount: 0 } } }));
+
+    await page.goto(`${baseURL}/equipe`);
+    const tracker = page.getByRole("region", { name: "Exécutions récentes" });
+    await expect(tracker.getByText("Lecture de votre activité et du diagnostic").first()).toBeVisible();
+    await expect(tracker.getByText("Rédaction des contenus")).toBeVisible();
+    await expect(tracker.getByText(/Durée habituelle : environ 30 s/)).toBeVisible();
+    await expect(tracker.getByText(/Vous pouvez quitter cette page/)).toBeVisible();
+
+    await page.goto(`${baseURL}/dashboard`);
+    await page.goBack();
+    await expect(tracker.getByText("Lecture de votre activité et du diagnostic").first()).toBeVisible();
+
+    finished = true;
+    await expect(page.getByRole("status")).toContainText("Demande traitée");
+    await expect(tracker.getByText("Camille a terminé : 3 élément(s) à examiner.")).toBeVisible();
+    await expect(tracker.getByRole("link", { name: "Voir le résultat" })).toHaveAttribute("href", "/dashboard?view=validation");
   } finally {
     await prisma.$disconnect();
   }

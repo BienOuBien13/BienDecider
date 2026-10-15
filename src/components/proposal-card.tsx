@@ -2,10 +2,12 @@
 
 import type { AgentProposal } from "@prisma/client";
 import { useState } from "react";
+import { AskPaulButton } from "@/components/ask-paul-button";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { assessActionRisk } from "@/lib/delegation-risk";
 import { getApprovalConsequence, getProposalGuidance } from "@/lib/channel-capabilities";
 import { proposalStatusView, STATUS_TONE_CLASSES } from "@/lib/proposal-status";
+import { decideProposalReview, reviewProposal } from "@/lib/proposal-review";
 
 const KIND_LABELS: Record<string, string> = {
   gbp_update: "Mise à jour de fiche établissement Google",
@@ -37,20 +39,28 @@ export function ProposalCard({
   proposal,
   onDecision,
   onExecute,
+  onSetLeadSource,
   busy,
   showAgent = false,
   riskSettings,
   facebookPageName = null,
   siteDestination,
+  companyPhone,
+  companyCertifications,
+  leadSource,
 }: {
   proposal: AgentProposal;
   onDecision: (id: string, decision: ProposalDecision) => Promise<boolean>;
-  onExecute?: (id: string, expectedVersion: number, confirmed: true) => void;
+  onExecute?: (id: string, expectedVersion: number, confirmed: true, acknowledgedReviewIds: string[]) => void;
+  onSetLeadSource?: (id: string, source: string) => Promise<boolean>;
   busy?: boolean;
   showAgent?: boolean;
   riskSettings?: Record<string, string>;
   facebookPageName?: string | null;
   siteDestination?: string | null;
+  companyPhone?: string | null;
+  companyCertifications?: string | null;
+  leadSource?: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(proposal.content);
@@ -59,10 +69,16 @@ export function ProposalCard({
   const [confirmingPublication, setConfirmingPublication] = useState(false);
   const [confirmingSitePublication, setConfirmingSitePublication] = useState(false);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const [sourceDraft, setSourceDraft] = useState(leadSource ?? "");
+  const [reviewAcknowledgement, setReviewAcknowledgement] = useState<{ version: number; ids: string[] }>({ version: proposal.version, ids: [] });
   const persona = PERSONAS[proposal.agent as Exclude<AgentKey, "co_ceo">];
   const guidance = getProposalGuidance(proposal.kind, facebookPageName);
   const statusView = proposalStatusView(proposal.status, proposal.kind, facebookPageName);
   const risk = assessActionRisk(proposal.kind, {}, riskSettings?.[proposal.kind]);
+  const reviewPoints = reviewProposal({ kind: proposal.kind, content: proposal.content, companyPhone, companyCertifications, leadSource });
+  const acknowledgedReviewIds = reviewAcknowledgement.version === proposal.version ? reviewAcknowledgement.ids : [];
+  const review = decideProposalReview(reviewPoints, acknowledgedReviewIds);
+  const reviewBlocked = review.blockers.length > 0 || review.missingAcknowledgements.length > 0;
   let displayContent = proposal.content;
   if (proposal.kind === "gmail_email") {
     try {
@@ -120,7 +136,7 @@ export function ProposalCard({
   }
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4">
+    <article id={`proposal-${proposal.id}`} tabIndex={-1} className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="text-slate-600">
           {showAgent && persona ? `${persona.name} · ` : ""}
@@ -150,6 +166,7 @@ export function ProposalCard({
           <span>Pourquoi ?</span>
         </summary>
         <p className="mt-1 max-w-prose text-xs text-slate-600">{risk.explanation}</p>
+        <p className="mt-1 max-w-prose text-xs text-slate-600">Ce niveau décrit l&apos;exposition de l&apos;action, pas l&apos;exactitude des affirmations du contenu.</p>
         <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
           {(Object.entries(risk.factors) as [keyof typeof risk.factors, boolean][])
             .filter(([, applies]) => applies)
@@ -158,6 +175,48 @@ export function ProposalCard({
         </ul>
         <p className="mt-1 text-xs font-medium text-slate-700">Dans ce prototype, toute action réelle reste soumise à votre validation.</p>
       </details>
+      {reviewPoints.length > 0 && (
+        <section aria-label="Vérifications du contenu" className="mt-3 border-l-2 border-amber-500 pl-3">
+          <h4 className="text-sm font-medium text-slate-900">À vérifier avant diffusion · version {proposal.version}</h4>
+          <ul className="mt-2 space-y-2">
+            {reviewPoints.map((point) => (
+              <li key={point.id} className="text-sm text-slate-800">
+                <p><span aria-hidden="true">{point.blocking ? "BLOQUANT · " : "À vérifier · "}</span><span className="font-medium">{point.title}</span></p>
+                {point.evidence && <blockquote className="mt-1 border-l border-slate-300 pl-2 text-xs text-slate-600">« {point.evidence} »</blockquote>}
+                <p className="mt-1 text-xs text-slate-700">{point.expectedAction}</p>
+                {point.id === "prospect_source_missing" && onSetLeadSource && (
+                  <form
+                    className="mt-2 flex flex-wrap items-end gap-2"
+                    onSubmit={async (event) => {
+                      event.preventDefault();
+                      if (await onSetLeadSource(proposal.id, sourceDraft.trim())) setSourceDraft(sourceDraft.trim());
+                    }}
+                  >
+                    <label className="min-w-0 flex-1 text-xs font-medium text-slate-700">
+                      URL de la source
+                      <input type="url" required value={sourceDraft} onChange={(event) => setSourceDraft(event.target.value)} className="mt-1 min-h-10 w-full rounded border border-slate-300 px-2 text-sm" />
+                    </label>
+                    <button type="submit" disabled={busy || !sourceDraft.trim()} className="min-h-10 rounded bg-slate-800 px-3 text-sm text-white disabled:opacity-50">Enregistrer la source</button>
+                  </form>
+                )}
+                {point.requiresAcknowledgement && (
+                  <label className="mt-1 flex items-start gap-2 text-xs text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={acknowledgedReviewIds.includes(point.id)}
+                      onChange={(event) => setReviewAcknowledgement({
+                        version: proposal.version,
+                        ids: event.target.checked ? [...acknowledgedReviewIds, point.id] : acknowledgedReviewIds.filter((id) => id !== point.id),
+                      })}
+                    />
+                    <span>J&apos;ai vérifié ce point pour cette version. Cette confirmation est humaine, pas une vérification indépendante.</span>
+                  </label>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {editing ? (
         <form onSubmit={approveEditedContent} className="mt-3 space-y-2">
           <label htmlFor={`proposal-content-${proposal.id}`} className="text-xs font-medium text-slate-700">Modifier le contenu</label>
@@ -191,6 +250,7 @@ export function ProposalCard({
           <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{displayContent}</p>
         </details>
       )}
+      <AskPaulButton element={{ type: "proposal", id: proposal.id, title: proposal.title }} />
       {proposal.status === "rejetee" && proposal.rejectionReason && (
         <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600"><span className="font-medium">Raison du rejet : </span>{proposal.rejectionReason}</p>
       )}
@@ -281,8 +341,8 @@ export function ProposalCard({
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
-              onClick={() => { setConfirmingPublication(false); onExecute(proposal.id, proposal.version, true); }}
-              disabled={busy}
+              onClick={() => { setConfirmingPublication(false); onExecute(proposal.id, proposal.version, true, acknowledgedReviewIds); }}
+              disabled={busy || reviewBlocked}
               className="min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50"
             >
               Confirmer la publication
@@ -307,7 +367,7 @@ export function ProposalCard({
           <p className="text-sm text-slate-800">Confirmer la mise en ligne sur {siteDestination ?? "le site public de votre entreprise sur BienDecider"} ? La page deviendra visible par vos clients.</p>
           <p className="mt-2 text-xs text-slate-600">Cette confirmation est distincte de l&apos;approbation du brief. Le contenu final est généré lors de la publication.</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => { setConfirmingSitePublication(false); onExecute(proposal.id, proposal.version, true); }} disabled={busy} className="min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50">Confirmer la mise en ligne</button>
+            <button type="button" onClick={() => { setConfirmingSitePublication(false); onExecute(proposal.id, proposal.version, true, acknowledgedReviewIds); }} disabled={busy || reviewBlocked} className="min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50">Confirmer la mise en ligne</button>
             <button type="button" onClick={() => setConfirmingSitePublication(false)} disabled={busy} className="min-h-11 rounded-lg bg-white px-3 py-2 text-sm text-slate-700 disabled:opacity-50">Annuler</button>
           </div>
         </div>

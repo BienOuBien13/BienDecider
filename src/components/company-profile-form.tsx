@@ -149,7 +149,7 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
   }
 
   return (
-    <AppShell>
+    <AppShell paul={!guided}>
       <div className="mx-auto max-w-lg">
         <h1 className="text-2xl font-semibold">
           {guided ? "Parlez-nous de votre activité" : "Mon entreprise"}

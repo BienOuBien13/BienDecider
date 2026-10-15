@@ -6,21 +6,21 @@ import { omitPasswordHash } from "@/lib/safe-company";
 import { DashboardClient } from "./dashboard-client";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 import { facebookConnectionView } from "@/lib/oauth/meta";
-import { countPendingDecisions } from "@/lib/pending-decisions";
+import { countPendingDecisions, needsAttention } from "@/lib/pending-decisions";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ searchParams }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; proposal?: string }>;
 }) {
-  const { view } = await searchParams;
+  const { view, proposal: focusProposalId } = await searchParams;
   const ownerEmail = await getSessionEmail();
   if (!ownerEmail) redirect("/login");
 
   const company = await prisma.company.findUnique({ where: { ownerEmail } });
   if (!company || !company.name) redirect("/onboarding");
 
-  const [planItems, recentAgentRuns, chatMessages, proposals, diagnosticCount, riskSettings, facebookConnection] = await Promise.all([
+  const [planItems, recentAgentRuns, proposals, leads, diagnosticCount, riskSettings, facebookConnection] = await Promise.all([
     prisma.actionPlanItem.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "asc" },
@@ -35,14 +35,11 @@ export default async function DashboardPage({ searchParams }: {
       take: 20,
       select: { id: true, agent: true, planItemId: true, status: true, attempts: true, maxDurationSeconds: true, queuedAt: true, startedAt: true, finishedAt: true, resultCount: true, errorMessage: true },
     }),
-    prisma.chatMessage.findMany({
-      where: { companyId: company.id },
-      orderBy: { createdAt: "asc" },
-    }),
     prisma.agentProposal.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.lead.findMany({ where: { companyId: company.id, proposalId: { not: null } }, select: { proposalId: true, source: true } }),
     prisma.auditFinding.count({ where: { companyId: company.id } }),
     getConfiguredRiskLevels(),
     prisma.channelConnection.findUnique({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } } }),
@@ -50,6 +47,10 @@ export default async function DashboardPage({ searchParams }: {
   // Seul le nom de la Page connectée est transmis au navigateur, jamais un jeton.
   const facebook = facebookConnectionView(facebookConnection ?? undefined, company.id);
   const facebookPageName = facebook.status === "connected" ? facebook.pageName : null;
+  const focusedProposal = focusProposalId ? proposals.find((proposal) => proposal.id === focusProposalId) : undefined;
+  const initialView = focusedProposal
+    ? needsAttention(focusedProposal, facebookPageName) ? "validation" : "historique"
+    : view === "validation" || view === "historique" ? view : "plan";
 
   return (
     <AppShell companyName={company.name} pendingCount={countPendingDecisions(proposals, facebookPageName)}>
@@ -57,12 +58,12 @@ export default async function DashboardPage({ searchParams }: {
         company={omitPasswordHash(company)}
         initialPlanItems={planItems}
         initialAgentRuns={recentAgentRuns}
-        initialChatMessages={chatMessages}
         initialProposals={proposals}
+        leadSources={Object.fromEntries(leads.map((lead) => [lead.proposalId!, lead.source]))}
         initialDiagnosticCount={diagnosticCount}
         riskSettings={riskSettings}
         facebookPageName={facebookPageName}
-        initialView={view === "validation" || view === "historique" ? view : "plan"}
+        initialView={initialView}
       />
     </AppShell>
   );

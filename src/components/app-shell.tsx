@@ -1,14 +1,18 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { SidebarNav } from "@/components/sidebar-nav";
+import { PaulPanel } from "@/components/paul-panel";
 
-/** Coque commune des pages connectées : barre latérale (parcours lisible) + contenu. */
+/** Coque commune des pages connectées : barre latérale (parcours lisible) + contenu + discussion avec Paul. */
 export function AppShell({
   companyName,
   pendingCount = 0,
+  paul = Boolean(companyName),
   children,
 }: {
   companyName?: string;
   pendingCount?: number;
+  paul?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -53,8 +57,9 @@ export function AppShell({
             <form action="/api/auth/logout" method="post" className="px-3 py-4"><button className="min-h-11 text-sm text-slate-700">Déconnexion</button></form>
           </details>
         </header>
-        <main id="contenu" tabIndex={-1} className="mx-auto max-w-6xl break-words p-4 focus:outline-none sm:p-6 md:p-8">{children}</main>
+        <main id="contenu" tabIndex={-1} className="mx-auto max-w-6xl break-words p-4 pb-24 focus:outline-none sm:p-6 sm:pb-24 md:p-8 md:pb-24">{children}</main>
       </div>
+      {paul && <Suspense fallback={null}><PaulPanel /></Suspense>}
     </div>
   );
 }

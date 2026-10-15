@@ -36,8 +36,9 @@ function sanitizeHtml(html: string): string {
 import { canExecuteAction } from "@/lib/delegation-risk";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 import { reserveUsageBudget } from "@/lib/agent-runs";
+import { decideProposalReview, reviewPublishedSiteHtml } from "@/lib/proposal-review";
 
-export async function publishSiteFromProposal(proposalId: string, expectedVersion: number) {
+export async function publishSiteFromProposal(proposalId: string, expectedVersion: number, acknowledgedReviewIds: string[] = []) {
   const proposal = await prisma.agentProposal.findUniqueOrThrow({
     where: { id: proposalId },
     include: { company: true },
@@ -99,6 +100,13 @@ ${proposal.content}`,
   const html = sanitizeHtml(rawHtml);
   if (!html.toLowerCase().includes("<html")) {
     throw new Error("Le modèle n'a pas renvoyé une page HTML exploitable.");
+  }
+  const finalReview = decideProposalReview(reviewPublishedSiteHtml(html, company.phone, company.certifications), acknowledgedReviewIds);
+  if (finalReview.blockers.length > 0) {
+    throw new PublishRefusedError(`Le site généré contient une affirmation non étayée : ${finalReview.blockers.map((point) => point.title).join(" ; ")}. Modifiez le brief avant de réessayer.`, 409);
+  }
+  if (finalReview.missingAcknowledgements.length > 0) {
+    throw new PublishRefusedError(`Le site généré ajoute un point factuel à vérifier : ${finalReview.missingAcknowledgements.map((point) => point.title).join(" ; ")}. Modifiez le brief pour le préciser ou le retirer avant de réessayer.`, 409);
   }
 
   let slug = company.siteSlug ?? slugify(company.name);
