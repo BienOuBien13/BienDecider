@@ -293,7 +293,7 @@ test("a draft is saved without approval, then a precise version is approved with
     await page.unroute(`**/api/proposals/${proposal.id}`);
 
     await card.getByRole("button", { name: "Approuver cette version", exact: true }).click();
-    await expect(card.getByText(/^Valider ajoute ce prospect à votre suivi de prospection\./)).toBeVisible();
+    await expect(card.getByText("À publier manuellement", { exact: true })).toBeVisible();
     saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
     expect(saved).toMatchObject({ content: finalContent, version: 3, approvedVersion: 3, status: "modifiee" });
     expect(saved.approvedAt).not.toBeNull();
@@ -406,7 +406,7 @@ test("a prospect without a public source cannot be added to the follow-up funnel
     await card.getByRole("button", { name: "Enregistrer la source" }).click();
     await expect(card.getByLabel("URL de la source")).toHaveValue("https://example.org/association");
     await card.getByRole("button", { name: "Valider", exact: true }).click();
-    await expect(card.getByText("À publier manuellement", { exact: true })).toBeVisible();
+    await expect(card.getByText("Approuvée", { exact: true })).toBeVisible();
     expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("a_contacter");
   } finally {
     await prisma.$disconnect();
@@ -475,7 +475,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(page.getByRole("link", { name: "Productions à valider 1", exact: true }).first()).toBeVisible();
     const site = await prisma.agentProposal.findFirstOrThrow({ where: { companyId: company.id, kind: "site_web_content" } });
     await page.route(`**/api/proposals/${site.id}/execute`, async (route) => {
-      expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true });
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true, acknowledgedReviewIds: [] });
       await prisma.agentProposal.update({ where: { id: site.id }, data: { status: "executee" } });
       await route.fulfill({ json: { url: "/site/test" } });
     });
