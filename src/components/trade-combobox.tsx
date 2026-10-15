@@ -15,8 +15,10 @@ export function TradeCombobox({
   const suggestions = searchTrades(value);
 
   return (
-    <div className="relative">
+    <div className="relative flex flex-col gap-3">
+      <label htmlFor="profile-trade" className="text-sm font-medium">Métier</label>
       <input
+        id="profile-trade"
         required
         placeholder="Votre métier (ex: plombier, restaurant...)"
         value={value}

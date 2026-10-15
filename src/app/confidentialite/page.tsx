@@ -94,7 +94,12 @@ export default function ConfidentialitePage() {
           La déconnexion GBP/Meta et la suppression automatique du compte depuis l&apos;application sont en préparation.
         </p>
 
-        <h2 className="mt-6 font-medium text-slate-900">Sous-traitants et destinataires</h2>
+        <h2 id="traitement" className="mt-6 scroll-mt-4 font-medium text-slate-900">Sous-traitants et destinataires</h2>
+        <p className="mt-1">
+          Traitement et publication sont deux choses distinctes : vos informations servent à préparer
+          le travail (envoi à nos prestataires ci-dessous) ; seules les productions que vous approuvez
+          et publiez sont rendues publiques, et elles peuvent reprendre des informations de votre entreprise.
+        </p>
         <ul className="mt-1 list-disc pl-5">
           <li>
             <strong>Anthropic</strong> (fournisseur du modèle d&apos;IA Claude) : les informations

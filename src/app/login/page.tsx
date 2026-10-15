@@ -8,6 +8,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,22 +49,32 @@ export default function LoginPage() {
         Connectez-vous avec l&apos;email et le mot de passe de votre compte.
       </p>
       <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
+        <label htmlFor="login-email" className="text-sm font-medium">Adresse e-mail</label>
         <input
+          id="login-email"
           required
           type="email"
+          autoComplete="email"
           placeholder="votre@email.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="rounded border px-3 py-2 text-sm"
         />
+        <label htmlFor="login-password" className="text-sm font-medium">Mot de passe</label>
         <input
+          id="login-password"
           required
-          type="password"
+          type={showPassword ? "text" : "password"}
+          autoComplete="current-password"
           placeholder="Mot de passe (6 caractères minimum)"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="rounded border px-3 py-2 text-sm"
         />
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />
+          Afficher le mot de passe
+        </label>
         <button
           type="submit"
           disabled={loading}
@@ -71,7 +82,7 @@ export default function LoginPage() {
         >
           {loading ? "Connexion…" : "Continuer"}
         </button>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         <p className="text-sm text-gray-600">
           Pas encore de compte ? <Link className="underline" href="/signup">Créer un compte</Link>
         </p>
