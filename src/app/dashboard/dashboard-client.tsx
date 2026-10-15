@@ -12,6 +12,7 @@ import { ProposalCard, type ProposalDecision } from "@/components/proposal-card"
 import { JourneyProgress } from "@/components/journey-progress";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 import { describeProgress, summarizeProposals } from "@/lib/proposal-progress";
+import { countByFilter, FILTER_LABELS, groupQueue, type QueueFilter } from "@/lib/validation-queue";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
@@ -51,6 +52,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const [discardingId, setDiscardingId] = useState<string | null>(null);
   const [discardReason, setDiscardReason] = useState("");
   const [decidedIds, setDecidedIds] = useState<string[]>([]);
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
 
   async function refresh() {
     const [planResponse, proposalResponse, runsResponse] = await Promise.all([
@@ -234,6 +236,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const closedItems = planItems.filter((item) => item.status === "ecarte" || item.status === "termine");
   const actionable = proposals.filter((proposal) => needsAttention(proposal, facebookPageName));
   const validationItems = proposals.filter((proposal) => needsAttention(proposal, facebookPageName) || decidedIds.includes(proposal.id));
+  const queueCounts = countByFilter(validationItems);
+  const queueGroups = groupQueue(validationItems, queueFilter, new Map(planItems.map((item) => [item.id, item.title])));
   const history = proposals.filter((proposal) => !needsAttention(proposal, facebookPageName));
   const nextItem = activeItems.find((item) => item.status === "propose");
   const runningItem = activeItems.find((item) => item.status === "en_cours");
@@ -372,11 +376,29 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <p className="mt-2 max-w-prose text-sm text-slate-600">Aucune production à valider ou à publier. Les brouillons de l&apos;équipe apparaissent ici pour être relus, corrigés ou refusés avant toute action externe.</p>
             <Link href={emptyNextHref} className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">{emptyNextLabel}</Link>
           </div>}
-          {validationItems.map((proposal) => (
-            <div key={proposal.id}>
-              <p className="mb-2 text-xs text-slate-600">Action d&apos;origine : {planItems.find((item) => item.id === proposal.planItemId)?.title ?? "demande ponctuelle à l'équipe"}</p>
-              <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
+          {validationItems.length > 0 && (
+            <div role="group" aria-label="Filtrer les productions" className="flex flex-wrap gap-2">
+              {(Object.keys(FILTER_LABELS) as QueueFilter[]).map((filter) => (
+                <button key={filter} type="button" aria-pressed={queueFilter === filter} onClick={() => setQueueFilter(filter)}
+                  className={`min-h-11 rounded-lg border px-3 text-sm ${queueFilter === filter ? "border-indigo-700 bg-indigo-50 font-medium text-indigo-900" : "border-slate-300 text-slate-700"}`}>
+                  {FILTER_LABELS[filter]} ({queueCounts[filter]})
+                </button>
+              ))}
             </div>
+          )}
+          {validationItems.length > 0 && queueGroups.length === 0 && (
+            <div role="status" className="py-4">
+              <p className="text-sm text-slate-700">Aucune production ne correspond à ce filtre. {queueCounts.all} production(s) restent dans la file.</p>
+              <button type="button" onClick={() => setQueueFilter("all")} className="mt-2 min-h-11 text-sm font-medium text-indigo-700 underline">Afficher toutes les productions</button>
+            </div>
+          )}
+          {queueGroups.map((group) => (
+            <section key={group.key} aria-labelledby={`group-${group.key}`} className="space-y-3">
+              <h2 id={`group-${group.key}`} className="text-sm font-semibold text-slate-800">{group.title} <span className="font-normal text-slate-600">({group.items.length})</span></h2>
+              {group.items.map((proposal) => (
+                <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
+              ))}
+            </section>
           ))}
         </section>
       )}

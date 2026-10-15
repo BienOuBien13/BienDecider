@@ -4,6 +4,7 @@ import { isAdminEmail, isExplicitAdminEmail } from "../src/lib/admin";
 import { describeProgress, isActionDone, summarizeProposals } from "../src/lib/proposal-progress";
 import { getApprovalConsequence } from "../src/lib/channel-capabilities";
 import { proposalStatusView } from "../src/lib/proposal-status";
+import { countByFilter, groupQueue, UNATTACHED_GROUP_TITLE } from "../src/lib/validation-queue";
 
 test("risk rules use registered kinds and contextual factors, then fail closed", () => {
   expect(assessActionRisk("piste_croissance").level).toBe("modere");
@@ -96,4 +97,26 @@ test("production states use one glossary, an icon next to the colour, and manual
     expect(view.label, status).not.toMatch(/Validée|Réalisée|Modifiée|exécut/);
   }
   expect(proposalStatusView("publication_incertaine", "social_post").tone).toBe("alerte");
+});
+
+test("the validation queue groups by action, keeps unattached items in their own group and never hides the remaining count", () => {
+  const titles = new Map([["a1", "Préparer la communication"], ["a2", "Refaire le site"]]);
+  const items = [
+    { id: "1", planItemId: "a2", status: "validee" },
+    { id: "2", planItemId: "a1", status: "en_attente" },
+    { id: "3", planItemId: null, status: "en_attente" },
+    { id: "4", planItemId: "inconnue", status: "publication_incertaine" },
+    { id: "5", planItemId: "a1", status: "modifiee" },
+  ];
+  const all = groupQueue(items, "all", titles);
+  expect(all.map((group) => [group.title, group.items.length])).toEqual([
+    ["Refaire le site", 1], ["Préparer la communication", 2], [UNATTACHED_GROUP_TITLE, 2],
+  ]);
+  expect(all.at(-1)?.key).toBe("ponctuelle");
+  expect(groupQueue(items, "a_relire", titles).map((group) => group.items.map((item) => item.id))).toEqual([["2"], ["3"]]);
+  expect(groupQueue(items, "approuvees", titles).flatMap((group) => group.items.map((item) => item.id)).sort()).toEqual(["1", "5"]);
+  expect(groupQueue(items, "a_verifier", titles)).toHaveLength(1);
+  expect(groupQueue([items[0]], "a_relire", titles)).toEqual([]);
+  expect(countByFilter(items)).toEqual({ all: 5, a_relire: 2, approuvees: 2, a_verifier: 1 });
+  expect(groupQueue([], "all", titles)).toEqual([]);
 });

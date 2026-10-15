@@ -373,7 +373,13 @@ test("single validation queue, persistent decisions, publishing and error recove
     expect(await prisma.executionLog.count({ where: { proposalId: unapprovedSite.id } })).toBe(0);
     await prisma.agentProposal.delete({ where: { id: unapprovedSite.id } });
     const manual = page.locator("article").filter({ hasText: "Demande manuelle" });
-    await expect(page.getByText("Action d'origine : Préparer la communication")).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: "Préparer la communication (1)" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Demandes ponctuelles à l'équipe (2)" })).toBeVisible();
+    await page.getByRole("button", { name: "À vérifier (0)" }).click();
+    await expect(page.locator("article")).toHaveCount(0);
+    await expect(page.getByText("Aucune production ne correspond à ce filtre. 3 production(s) restent dans la file.")).toBeVisible();
+    await page.getByRole("button", { name: "Afficher toutes les productions" }).click();
+    await expect(page.locator("article")).toHaveCount(3);
     await expect(manual.getByText(/^Valider approuve ce contenu\./)).toBeVisible();
     await expect(manual.getByText("Contenu manuel")).toBeVisible();
     await page.route("**/api/proposals/*", async (route) => {
