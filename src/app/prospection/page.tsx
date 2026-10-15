@@ -16,7 +16,10 @@ export default async function ProspectionPage() {
   if (!company || !company.name) redirect("/onboarding");
 
   const leads = await prisma.lead.findMany({
-    where: { companyId: company.id, stage: { notIn: ["propose", "ecarte"] } },
+    where: {
+      companyId: company.id,
+      OR: [{ stage: { notIn: ["propose", "ecarte"] } }, { stage: "ecarte", statusReason: { not: null } }],
+    },
     orderBy: { updatedAt: "desc" },
   });
   const pendingCount = await getPendingDecisionCount(company.id);
@@ -27,6 +30,9 @@ export default async function ProspectionPage() {
         initialLeads={leads}
         initialAutoOutreach={company.autoOutreachEnabled}
         sendingConfigured={isOutreachSendingConfigured()}
+        companyName={company.name}
+        trade={company.trade}
+        phone={company.phone}
       />
     </AppShell>
   );
