@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
 
 export function LinkedInPanel({ configured, status, name, expiresAt, hasConnection }: {
   configured: boolean;
@@ -44,8 +45,8 @@ export function LinkedInPanel({ configured, status, name, expiresAt, hasConnecti
           <p className="mt-1 text-sm text-slate-600">{labels[removed ? "disconnected" : status]}</p>
           {!removed && name && <p className="mt-1 break-words text-sm font-medium">{name}</p>}
           {!removed && expiresAt && <p className="mt-1 text-xs text-slate-500">Autorisation valable jusqu&apos;au {expiresAt} (heure de Paris)</p>}
-          <p className="mt-2 text-xs text-slate-600">Profil personnel uniquement. Publication non disponible ; la Page entreprise reste en attente d&apos;accès LinkedIn.</p>
-          {!configured && <p className="mt-2 text-xs text-amber-700">Configuration serveur requise : LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET et LINKEDIN_TOKEN_ENCRYPTION_KEY.</p>}
+          <p className="mt-2 text-xs text-slate-600">{CHANNEL_CAPABILITIES.linkedin.availability} Les Pages entreprise ne sont pas reliées.</p>
+          {!configured && <p className="mt-2 text-xs text-amber-700">La liaison LinkedIn n&apos;est pas disponible sur cette version.</p>}
         </div>
         {configured && <a href="/api/oauth/linkedin/start" className="rounded bg-black px-3 py-2 text-sm text-white">{hasConnection && !removed ? "Réautoriser LinkedIn" : "Autoriser LinkedIn"}</a>}
       </div>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FacebookConnectionView } from "@/lib/oauth/meta";
+import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
 
 export function FacebookPanel({ configured, view }: { configured: boolean; view: FacebookConnectionView }) {
   const router = useRouter();
@@ -16,7 +17,7 @@ export function FacebookPanel({ configured, view }: { configured: boolean; view:
     disconnected: "Non autorisé",
     error: "Autorisation à refaire · reconnectez votre Page",
     selection: "Autorisation reçue · choisissez la Page à connecter",
-    connected: "Page vérifiée",
+    connected: "Page reliée et vérifiée",
   };
 
   async function send(url: string, body: unknown, fallback: string) {
@@ -63,8 +64,8 @@ export function FacebookPanel({ configured, view }: { configured: boolean; view:
           <p className="mt-1 text-sm text-slate-600">{labels[view.status]}</p>
           {view.status === "connected" && <p className="mt-1 break-words text-sm font-medium">{view.pageName}</p>}
           {(view.status === "connected" || view.status === "selection") && <p className="mt-1 break-words text-xs text-slate-500">Autorisé par {view.userName}</p>}
-          <p className="mt-2 text-xs text-slate-600">Une seule Page, choisie par vous. Publication non disponible pour l&apos;instant ; Instagram n&apos;est pas encore proposé.</p>
-          {!configured && <p className="mt-2 text-xs text-amber-700">Configuration serveur requise : META_APP_ID, META_APP_SECRET et META_TOKEN_ENCRYPTION_KEY.</p>}
+          <p className="mt-2 text-xs text-slate-600">{CHANNEL_CAPABILITIES.facebook.nextStep} {CHANNEL_CAPABILITIES.instagram.availability}</p>
+          {!configured && <p className="mt-2 text-xs text-amber-700">La liaison Facebook n&apos;est pas disponible sur cette version.</p>}
         </div>
         {configured && <a href="/api/oauth/meta/start" className="rounded bg-black px-3 py-2 text-sm text-white">{view.status === "disconnected" ? "Autoriser Facebook" : "Réautoriser Facebook"}</a>}
       </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
 
 export function GmailPanel({ configured, authorized, failed, senderEmail }: { configured: boolean; authorized: boolean; failed: boolean; senderEmail: string | null }) {
   const router = useRouter();
@@ -66,9 +67,9 @@ export function GmailPanel({ configured, authorized, failed, senderEmail }: { co
           <h2 id="gmail-heading" className="font-medium">Gmail · envoi de messages</h2>
           <p className="mt-1 text-sm text-slate-500">{failed ? "Réautorisation nécessaire" : authorized ? "Envoi autorisé" : "Non autorisé"}</p>
           {senderEmail && <p className="mt-1 break-all text-sm font-medium">{senderEmail}</p>}
-          <p className="mt-2 text-sm text-slate-600">Envoi depuis le compte choisi dans Google, sans lecture de votre boîte de réception. Aucun envoi automatique.</p>
+          <p className="mt-2 text-sm text-slate-600">{CHANNEL_CAPABILITIES.gmail.nextStep} BienDecider ne lit pas votre boîte de réception.</p>
         </div>
-        {configured ? <a href="/api/oauth/gmail/start" className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">{authorized || failed ? "Réautoriser Gmail" : "Autoriser Gmail"}</a> : <span className="text-sm text-amber-700">Configuration serveur requise</span>}
+        {configured ? <a href="/api/oauth/gmail/start" className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">{authorized || failed ? "Relier de nouveau Gmail" : "Relier Gmail"}</a> : <span className="text-sm text-amber-700">L&apos;envoi Gmail n&apos;est pas disponible sur cette version.</span>}
       </div>
       {notice && <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
@@ -80,7 +81,7 @@ export function GmailPanel({ configured, authorized, failed, senderEmail }: { co
               <label className="block text-sm">Destinataire<input type="email" required maxLength={254} value={to} onChange={(event) => { setTo(event.target.value); edited(); }} className="mt-1 block w-full rounded-lg border px-3 py-2" /></label>
               <label className="block text-sm">Objet<input required maxLength={200} value={subject} onChange={(event) => { setSubject(event.target.value); edited(); }} className="mt-1 block w-full rounded-lg border px-3 py-2" /></label>
               <label className="block text-sm">Message<textarea required maxLength={20000} rows={6} value={text} onChange={(event) => { setText(event.target.value); edited(); }} className="mt-1 block w-full rounded-lg border px-3 py-2" /></label>
-                <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-900"><span className="font-semibold">Risque élevé · communication externe non rappelable.</span> Vérifiez l&apos;adresse et le contenu : le message partira depuis {senderEmail ?? "le compte Gmail autorisé"}.</p>
+                <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-900"><span className="font-semibold">Le message partira à l&apos;extérieur et ne pourra pas être rappelé.</span> Destinataire : {to || "à préciser"}. Expéditeur : {senderEmail ?? "le compte Gmail relié"}.</p>
               <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" /><span>Je confirme le destinataire et le contenu de cet envoi.</span></label>
               <button disabled={!confirmed || busy} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? "Envoi en cours…" : "Envoyer avec Gmail"}</button>
             </fieldset>

@@ -142,7 +142,7 @@ test("Gmail compose requires confirmation and handles uncertain sends", async ({
     await page.getByLabel("Destinataire", { exact: true }).fill("recipient@example.invalid");
     await page.getByLabel("Objet", { exact: true }).fill("Test manuel");
     await page.getByLabel("Message", { exact: true }).fill("Contenu confirmé");
-    await expect(page.getByText("Risque élevé · communication externe non rappelable.", { exact: false })).toBeVisible();
+    await expect(page.getByText("Le message partira à l'extérieur et ne pourra pas être rappelé.", { exact: false })).toBeVisible();
     await expect(page.getByRole("button", { name: "Envoyer avec Gmail" })).toBeDisabled();
     await page.getByLabel("Je confirme le destinataire et le contenu de cet envoi.").check();
     let firstId: string | undefined;
@@ -221,7 +221,7 @@ test("OAuth authorization is not advertised as a verified business connection", 
     for (const width of [320, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`${baseURL}/connexions`);
-      await expect(page.getByText("Autorisation expirée", { exact: true })).toBeVisible();
+      await expect(page.getByText("Connexion expirée · reliez de nouveau le compte", { exact: true })).toBeVisible();
       // Jeton en clair de l'ancien flux Facebook : jamais présenté comme une connexion, à refaire.
       await expect(page.getByText("Autorisation à refaire · reconnectez votre Page", { exact: true })).toBeVisible();
       await expect(page.getByText("Page vérifiée", { exact: true })).toHaveCount(0);
@@ -232,7 +232,7 @@ test("OAuth authorization is not advertised as a verified business connection", 
     }
     await prisma.channelConnection.deleteMany({ where: { companyId: company.id } });
     await page.reload();
-    await expect(page.locator("main ul").getByText("Non autorisé", { exact: true })).toHaveCount(1);
+    await expect(page.locator("main ul").getByText("Compte non relié", { exact: true })).toHaveCount(1);
     await expect(page.getByRole("region", { name: "Facebook · Page" }).getByText("Non autorisé", { exact: true })).toBeVisible();
   } finally { await prisma.$disconnect(); }
 });
@@ -331,7 +331,7 @@ test("a site is published only from its approved version", async ({ page, compan
       companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Site modifié après aperçu", content: "Brief v2", status: "modifiee", version: 2, approvedVersion: 2,
     } });
     expect((await execute(changed.id)).status()).toBe(400);
-    expect((await execute(changed.id, { expectedVersion: 1 })).status()).toBe(409);
+    expect((await execute(changed.id, { expectedVersion: 1, confirmed: true })).status()).toBe(409);
     for (const id of [legacy.id, changed.id]) {
       expect(await prisma.executionLog.count({ where: { proposalId: id } })).toBe(0);
     }
@@ -392,10 +392,12 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(page.getByRole("link", { name: "À valider 1", exact: true })).toBeVisible();
     const site = await prisma.agentProposal.findFirstOrThrow({ where: { companyId: company.id, kind: "site_web_content" } });
     await page.route(`**/api/proposals/${site.id}/execute`, async (route) => {
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true });
       await prisma.agentProposal.update({ where: { id: site.id }, data: { status: "executee" } });
       await route.fulfill({ json: { url: "/site/test" } });
     });
     await page.getByRole("button", { name: "Publier le site" }).click();
+    await page.getByRole("button", { name: "Confirmer la mise en ligne" }).click();
     await expect(page.locator("article").filter({ hasText: site.title }).getByText("Réalisée", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 0", exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("validation-desktop.png"), fullPage: true });

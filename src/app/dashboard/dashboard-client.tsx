@@ -179,11 +179,11 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     finally { setBusyId(null); }
   }
 
-  async function handleExecute(proposalId: string, expectedVersion: number) {
+  async function handleExecute(proposalId: string, expectedVersion: number, confirmed: true) {
     setBusyId(proposalId);
     setError(null);
     try {
-      const result = await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion });
+      const result = await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion, confirmed });
       setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
       setNotice(result?.message ?? "Publication effectuée. Elle figure dans les résultats.");
@@ -360,7 +360,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
           {validationItems.map((proposal) => (
             <div key={proposal.id}>
               <p className="mb-2 text-xs text-slate-500">{planItems.find((item) => item.id === proposal.planItemId)?.title ?? "Demande ponctuelle à l'équipe"}</p>
-              <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} />
+              <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
             </div>
           ))}
         </section>

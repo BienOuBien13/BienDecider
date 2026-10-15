@@ -1,0 +1,92 @@
+export const CHANNEL_CAPABILITIES = {
+  site: {
+    label: "Site vitrine",
+    availability: "Publication disponible après approbation et confirmation.",
+    nextStep: "Vous relisez le brief puis confirmez la mise en ligne. BienDecider génère la page à partir du brief approuvé.",
+  },
+  facebook: {
+    label: "Page Facebook",
+    availability: "Publication disponible sur une Page reliée et vérifiée.",
+    nextStep: "Après votre approbation et une confirmation séparée, BienDecider publie sur la Page choisie.",
+  },
+  googleBusiness: {
+    label: "Fiche établissement Google",
+    availability: "La publication des changements n'est pas disponible.",
+    nextStep: "Les propositions restent à copier et à appliquer vous-même dans Google.",
+  },
+  gmail: {
+    label: "Email avec Gmail",
+    availability: "Envoi manuel disponible après autorisation du compte.",
+    nextStep: "Vous choisissez le destinataire et confirmez chaque envoi depuis votre compte Gmail.",
+  },
+  linkedin: {
+    label: "Profil LinkedIn",
+    availability: "La connexion concerne votre profil personnel ; la publication n'est pas disponible.",
+    nextStep: "Vous pouvez copier un contenu préparé et le publier vous-même.",
+  },
+  instagram: {
+    label: "Instagram",
+    availability: "La connexion et la publication ne sont pas disponibles.",
+    nextStep: "Vous pouvez copier un contenu préparé et le publier vous-même.",
+  },
+  prospecting: {
+    label: "Prospection",
+    availability: "Les pistes et les modèles de message sont préparés, aucun message n'est envoyé automatiquement.",
+    nextStep: "Vous vérifiez la source, choisissez qui contacter et envoyez vous-même le message.",
+  },
+} as const;
+
+export type ProposalGuidance = {
+  destination: string;
+  nextStep: string;
+  canCopy: boolean;
+};
+
+export function getProposalGuidance(kind: string, facebookPageName: string | null): ProposalGuidance {
+  switch (kind) {
+    case "site_web_content":
+      return {
+        destination: "Page publique de votre entreprise sur BienDecider",
+        nextStep: CHANNEL_CAPABILITIES.site.nextStep,
+        canCopy: false,
+      };
+    case "social_post":
+      return facebookPageName
+        ? {
+            destination: `${CHANNEL_CAPABILITIES.facebook.label} « ${facebookPageName} »`,
+            nextStep: CHANNEL_CAPABILITIES.facebook.nextStep,
+            canCopy: true,
+          }
+        : {
+            destination: "Aucune destination de publication reliée",
+            nextStep: CHANNEL_CAPABILITIES.instagram.nextStep,
+            canCopy: true,
+          };
+    case "gbp_update":
+    case "review_reply":
+      return {
+        destination: CHANNEL_CAPABILITIES.googleBusiness.label,
+        nextStep: CHANNEL_CAPABILITIES.googleBusiness.nextStep,
+        canCopy: true,
+      };
+    case "prospecting_email":
+      return {
+        destination: "Votre outil de messagerie",
+        nextStep: CHANNEL_CAPABILITIES.prospecting.nextStep,
+        canCopy: true,
+      };
+    case "prospect":
+    case "piste_croissance":
+      return {
+        destination: "Votre suivi de prospection",
+        nextStep: "Vérifiez la source et décidez vous-même de la prochaine action.",
+        canCopy: false,
+      };
+    default:
+      return {
+        destination: "Destination à confirmer",
+        nextStep: "Vérifiez le canal avant d'utiliser ce contenu.",
+        canCopy: true,
+      };
+  }
+}

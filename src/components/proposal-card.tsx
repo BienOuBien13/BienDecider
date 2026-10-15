@@ -4,6 +4,7 @@ import type { AgentProposal } from "@prisma/client";
 import { useState } from "react";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { assessActionRisk } from "@/lib/delegation-risk";
+import { getProposalGuidance } from "@/lib/channel-capabilities";
 
 export const STATUS_LABELS: Record<string, string> = {
   en_attente: "À valider",
@@ -18,10 +19,10 @@ export const STATUS_LABELS: Record<string, string> = {
 };
 
 const KIND_LABELS: Record<string, string> = {
-  gbp_update: "Fiche Google",
+  gbp_update: "Mise à jour de fiche établissement Google",
   review_reply: "Réponse à un avis",
   site_web_content: "Contenu du site web",
-  social_post: "Post réseaux sociaux",
+  social_post: "Publication sur les réseaux",
   prospecting_email: "Email de prospection",
   piste_croissance: "Piste de croissance",
   prospect: "Prospect à contacter",
@@ -51,21 +52,26 @@ export function ProposalCard({
   showAgent = false,
   riskSettings,
   facebookPageName = null,
+  siteDestination,
 }: {
   proposal: AgentProposal;
   onDecision: (id: string, decision: ProposalDecision) => Promise<boolean>;
-  onExecute?: (id: string, expectedVersion: number) => void;
+  onExecute?: (id: string, expectedVersion: number, confirmed: true) => void;
   busy?: boolean;
   showAgent?: boolean;
   riskSettings?: Record<string, string>;
   facebookPageName?: string | null;
+  siteDestination?: string | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(proposal.content);
   const [rejecting, setRejecting] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [confirmingPublication, setConfirmingPublication] = useState(false);
+  const [confirmingSitePublication, setConfirmingSitePublication] = useState(false);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const persona = PERSONAS[proposal.agent as Exclude<AgentKey, "co_ceo">];
+  const guidance = getProposalGuidance(proposal.kind, facebookPageName);
   const risk = assessActionRisk(proposal.kind, {}, riskSettings?.[proposal.kind]);
   let displayContent = proposal.content;
   if (proposal.kind === "gmail_email") {
@@ -96,6 +102,15 @@ export function ProposalCard({
   const decide = (decision: Omit<ProposalDecision, "expectedVersion">) =>
     onDecision(proposal.id, { ...decision, expectedVersion: proposal.version });
 
+  async function copyContent() {
+    try {
+      await navigator.clipboard.writeText(displayContent);
+      setCopyNotice("Contenu copié. Publiez-le vous-même sur le canal de votre choix.");
+    } catch {
+      setCopyNotice("Copie impossible dans ce navigateur. Sélectionnez le contenu pour le copier.");
+    }
+  }
+
   // En cas d'échec, l'éditeur reste ouvert avec le texte saisi : rien n'est perdu ni annoncé à tort comme enregistré.
   async function saveDraft() {
     if (await decide({ status: "brouillon", content: editedContent.trim() })) setEditing(false);
@@ -119,7 +134,7 @@ export function ProposalCard({
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="text-slate-500">
           {showAgent && persona ? `${persona.name} · ` : ""}
-          {KIND_LABELS[proposal.kind] ?? proposal.kind}
+          {KIND_LABELS[proposal.kind] ?? "Autre proposition"}
         </span>
         <span
           className={`rounded-full px-2 py-0.5 ${
@@ -134,6 +149,11 @@ export function ProposalCard({
         </span>
       </div>
       <h3 className="mt-1 font-medium">{proposal.title}</h3>
+      <div className="mt-2 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+        <p><span className="font-medium">Destination :</span> {proposal.kind === "site_web_content" ? siteDestination ?? "Site public de votre entreprise sur BienDecider" : guidance.destination}</p>
+        <p className="mt-1">{guidance.nextStep}</p>
+        {proposal.kind === "site_web_content" && <p className="mt-1 text-xs text-amber-900">L&apos;approbation porte sur ce brief ; BienDecider générera le HTML au moment de la mise en ligne. Vérifiez ensuite la page publique.</p>}
+      </div>
       <p className="mt-1 text-xs text-slate-600">
         Version {proposal.version}
         {proposal.status === "en_attente" && proposal.draftSavedAt && (
@@ -247,6 +267,10 @@ export function ProposalCard({
           Facebook n&apos;a pas confirmé cette publication. Vérifiez votre Page avant toute nouvelle tentative.
         </p>
       )}
+      {guidance.canCopy && <div className="mt-3">
+        <button type="button" onClick={() => void copyContent()} disabled={busy} className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 disabled:opacity-50">Copier le contenu</button>
+        {copyNotice && <p role="status" className="mt-2 text-xs text-slate-600">{copyNotice}</p>}
+      </div>}
       {canPublishFacebook && !confirmingPublication && (
         <button
           onClick={() => setConfirmingPublication(true)}
@@ -263,7 +287,7 @@ export function ProposalCard({
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
-              onClick={() => { setConfirmingPublication(false); onExecute(proposal.id, proposal.version); }}
+              onClick={() => { setConfirmingPublication(false); onExecute(proposal.id, proposal.version, true); }}
               disabled={busy}
               className="min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50"
             >
@@ -279,14 +303,20 @@ export function ProposalCard({
           </div>
         </div>
       )}
-      {canPublishSite && (
-        <button
-          onClick={() => onExecute(proposal.id, proposal.version)}
-          disabled={busy}
-          className="mt-3 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          {busy ? "Publication…" : "Publier le site"}
+      {canPublishSite && !confirmingSitePublication && (
+        <button type="button" onClick={() => setConfirmingSitePublication(true)} disabled={busy} className="mt-3 min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50">
+          Publier le site
         </button>
+      )}
+      {canPublishSite && confirmingSitePublication && (
+        <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+          <p className="text-sm text-slate-800">Confirmer la mise en ligne sur {siteDestination ?? "le site public de votre entreprise sur BienDecider"} ? La page deviendra visible par vos clients.</p>
+          <p className="mt-2 text-xs text-slate-600">Cette confirmation est distincte de l&apos;approbation du brief. Le contenu final est généré lors de la publication.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => { setConfirmingSitePublication(false); onExecute(proposal.id, proposal.version, true); }} disabled={busy} className="min-h-11 rounded-lg bg-indigo-600 px-3 py-2 text-sm text-white disabled:opacity-50">Confirmer la mise en ligne</button>
+            <button type="button" onClick={() => setConfirmingSitePublication(false)} disabled={busy} className="min-h-11 rounded-lg bg-white px-3 py-2 text-sm text-slate-700 disabled:opacity-50">Annuler</button>
+          </div>
+        </div>
       )}
     </article>
   );

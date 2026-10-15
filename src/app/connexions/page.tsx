@@ -9,18 +9,17 @@ import { decryptGmailAccount, isGmailConfigured } from "@/lib/oauth/gmail";
 import { GmailPanel } from "./gmail-panel";
 import { LinkedInPanel } from "./linkedin-panel";
 import { decryptLinkedInAccount, isLinkedInConfigured, LINKEDIN_ERROR_MESSAGES } from "@/lib/oauth/linkedin";
+import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
 
 export const dynamic = "force-dynamic";
 
 const CHANNELS = [
   {
     channel: "google_business_profile",
-    label: "Fiche Google Business Profile",
+    label: CHANNEL_CAPABILITIES.googleBusiness.label,
     startUrl: "/api/oauth/google/start",
     configured: isGoogleOAuthConfigured(),
-    missingEnvHint: "GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET",
-    registrationStep:
-      "Obtenir l'accès Business Profile API pour le projet Google, puis configurer le client OAuth web.",
+    unavailable: CHANNEL_CAPABILITIES.googleBusiness.availability,
   },
 ] as const;
 
@@ -79,20 +78,25 @@ export default async function ConnexionsPage({
       <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold">Connexions</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Autorisez BienDecider à accéder à vos comptes via <strong>OAuth</strong>{" "}
-          depuis l&apos;écran officiel de Google, Meta ou LinkedIn — vous ne saisissez
-          jamais votre mot de passe ici, et vous pouvez révoquer l&apos;accès
-          à tout moment depuis votre compte fournisseur.
+          Relier un compte autorise un accès précis ; cela ne confie pas une activité et ne permet pas automatiquement de publier. Vous ne saisissez jamais le mot de passe de vos comptes fournisseurs ici.
         </p>
-        <p className="mt-3 text-sm text-amber-800">
-          Intégration en préparation : l&apos;autorisation OAuth ne confirme pas encore
-          l&apos;accès à une fiche Google. Une Page Facebook connectée est vérifiée auprès de Facebook.
-          La publication sur ces plateformes n&apos;est pas disponible.
-        </p>
+        <section className="mt-4 border-y border-slate-200 py-4" aria-labelledby="channel-capabilities">
+          <h2 id="channel-capabilities" className="text-sm font-medium text-slate-900">Capacités disponibles</h2>
+          <ul className="mt-2 space-y-2 text-sm text-slate-700">
+            {[
+              CHANNEL_CAPABILITIES.gmail,
+              CHANNEL_CAPABILITIES.facebook,
+              CHANNEL_CAPABILITIES.site,
+              CHANNEL_CAPABILITIES.googleBusiness,
+              CHANNEL_CAPABILITIES.linkedin,
+              CHANNEL_CAPABILITIES.instagram,
+            ].map((capability) => <li key={capability.label}><span className="font-medium">{capability.label} :</span> {capability.availability}</li>)}
+          </ul>
+        </section>
 
         {connected && (
           <p role="status" className="mt-4 rounded bg-green-50 p-3 text-sm text-green-700">
-            {connected === "gmail" ? "Gmail autorisé pour l'envoi manuel." : connected === "linkedin" ? "Profil LinkedIn autorisé. Aucune publication n'a été effectuée." : connected === "facebook_selection" ? "Autorisation Facebook reçue. Choisissez ci-dessous la Page à connecter." : "Autorisation OAuth enregistrée. Le compte professionnel reste à vérifier."}
+            {connected === "gmail" ? "Gmail relié. Vous pouvez rédiger et confirmer des envois individuels." : connected === "linkedin" ? "Profil LinkedIn relié. Aucune publication n'a été effectuée." : connected === "facebook_selection" ? "Accès Facebook autorisé. Choisissez la Page à relier." : "Accès Google autorisé ; la fiche établissement reste à vérifier."}
           </p>
         )}
         {error && (
@@ -122,12 +126,12 @@ export default async function ConnexionsPage({
             const expired = connection?.expiresAt ? connection.expiresAt.getTime() <= checkedAt : false;
             const connected = connection?.status === "connecte";
             const statusLabel = connection?.status === "erreur"
-              ? "Erreur d'autorisation"
+              ? "Connexion à renouveler"
               : connected && expired
-                ? "Autorisation expirée"
+                ? "Connexion expirée · reliez de nouveau le compte"
                 : connected
-                  ? "Autorisation enregistrée · compte à vérifier"
-                  : "Non autorisé";
+                  ? "Accès autorisé · fiche établissement à vérifier"
+                  : "Compte non relié";
             return (
               <li
                 key={c.channel}
@@ -138,12 +142,10 @@ export default async function ConnexionsPage({
                   <p className="text-xs text-gray-500">
                     {statusLabel}
                   </p>
-                  {connection?.expiresAt && <p className="mt-1 text-xs text-gray-500">Expiration du jeton : {connection.expiresAt.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} (heure de Paris)</p>}
+                  {connection?.expiresAt && <p className="mt-1 text-xs text-gray-500">Autorisation valable jusqu&apos;au {connection.expiresAt.toLocaleString("fr-FR", { timeZone: "Europe/Paris" })} (heure de Paris)</p>}
                   {!c.configured && (
                     <p className="mt-1 text-xs text-amber-600">
-                      Pas encore activable : variables d&apos;environnement{" "}
-                      <code>{c.missingEnvHint}</code> manquantes. Étape requise :{" "}
-                      {c.registrationStep}
+                      {c.unavailable} Aucun accès à la fiche établissement n&apos;est encore vérifié.
                     </p>
                   )}
                 </div>
@@ -152,14 +154,14 @@ export default async function ConnexionsPage({
                     href={c.startUrl}
                     className="shrink-0 rounded bg-black px-3 py-1.5 text-sm text-white"
                   >
-                      {connection ? "Réautoriser" : "Autoriser"}
+                      {connected ? "Relier de nouveau le compte Google" : "Relier mon compte Google"}
                   </a>
                 ) : (
                   <button
                     disabled
                     className="shrink-0 cursor-not-allowed rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-500"
                   >
-                    Indisponible
+                    Bientôt disponible
                   </button>
                 )}
               </li>
@@ -168,8 +170,7 @@ export default async function ConnexionsPage({
         </ul>
 
         <p className="mt-6 text-xs text-gray-400">
-          Les agents préparent leurs propositions sans accès direct à vos comptes.
-          Après validation, vous publiez vous-même sur Google ou Facebook.
+          Avant un envoi ou une publication, le canal, la destination et l&apos;étape à confirmer sont indiqués avec la proposition.
         </p>
       </div>
     </AppShell>
