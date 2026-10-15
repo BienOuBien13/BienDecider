@@ -28,3 +28,24 @@ test("database URL prefers the canonical name then Prisma aliases", () => {
     }
   }
 });
+
+test("database URL upgrades legacy SSL aliases to verify-full", () => {
+  const original = process.env.DATABASE_URL;
+  try {
+    for (const mode of ["prefer", "require", "verify-ca"]) {
+      process.env.DATABASE_URL = `postgresql://user:encoded%40password@db.example.invalid:5432/app?sslmode=${mode}&application_name=biendecider`;
+      const url = new URL(getDatabaseUrl());
+      assert.equal(url.searchParams.get("sslmode"), "verify-full");
+      assert.equal(url.searchParams.get("application_name"), "biendecider");
+      assert.equal(url.username, "user");
+      assert.equal(url.password, "encoded%40password");
+    }
+    process.env.DATABASE_URL = "postgresql://db.example.invalid/app?sslmode=verify-full";
+    assert.equal(new URL(getDatabaseUrl()).searchParams.get("sslmode"), "verify-full");
+    process.env.DATABASE_URL = "postgresql://db.example.invalid/app?uselibpqcompat=true&sslmode=require";
+    assert.equal(new URL(getDatabaseUrl()).searchParams.get("sslmode"), "require");
+  } finally {
+    if (original === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = original;
+  }
+});
