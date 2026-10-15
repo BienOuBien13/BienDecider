@@ -686,6 +686,55 @@ test("guided onboarding starts with three fields and keeps the full company page
   }
 });
 
+test("Paul is reachable from any page, keeps the conversation and the draft, and knows the page and the consulted element", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    await prisma.chatMessage.createMany({ data: [
+      { companyId: company.id, role: "user", content: "Bonjour Paul", createdAt: new Date(Date.now() - 60_000) },
+      { companyId: company.id, role: "assistant", content: "Bonjour, que puis-je faire ?", createdAt: new Date(Date.now() - 30_000) },
+    ] });
+    const proposal = await prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post du lundi", content: "Texte du post" } });
+    const sent: Array<{ message: string; context: { path: string; view?: string; element?: { type: string; id: string } } }> = [];
+    await page.route("**/api/co-ceo/message", async (route) => {
+      sent.push(route.request().postDataJSON());
+      await route.fulfill({ json: { reply: "Voici l'explication." } });
+    });
+
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const toggle = page.getByRole("button", { name: "Parler à Paul" });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await page.getByRole("button", { name: "Demander à Paul" }).first().click();
+    const panel = page.getByRole("dialog", { name: "Discussion avec Paul" });
+    await expect(panel).toBeVisible();
+    await expect(panel.getByText("Bonjour Paul")).toBeVisible();
+    await expect(panel.getByText(/sait que vous êtes sur : Productions à valider/)).toBeVisible();
+    await expect(panel.getByText("À propos de : production « Post du lundi »")).toBeVisible();
+
+    await panel.getByLabel("Message à Paul").fill("Explique-moi ça");
+    await panel.getByRole("button", { name: "Envoyer" }).click();
+    await expect(panel.getByText("Voici l'explication.")).toBeVisible();
+    expect(sent).toHaveLength(1);
+    expect(sent[0].message).toBe("Explique-moi ça");
+    expect(sent[0].context).toEqual({ path: "/dashboard", view: "validation", element: { type: "proposal", id: proposal.id } });
+
+    await panel.getByLabel("Message à Paul").fill("Une autre question");
+    await page.goto(`${baseURL}/prospection`);
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(panel.getByLabel("Message à Paul")).toHaveValue("Une autre question");
+    await expect(panel.getByText("Bonjour Paul")).toBeVisible();
+    await expect(panel.getByText(/sait que vous êtes sur : Prospection/)).toBeVisible();
+    await expect(panel.getByText(/À propos de/)).toHaveCount(0);
+
+    await panel.getByLabel("Message à Paul").press("Escape");
+    await expect(panel).toBeHidden();
+    await expect(toggle).toBeFocused();
+    await page.reload();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 test("agents request only missing profile details and wait for successful partial saving", async ({ page, company }, testInfo) => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
   let agentCalls = 0;

@@ -8,9 +8,10 @@ export async function GET() {
     return NextResponse.json({ error: "Non connecté" }, { status: 401 });
   }
 
-  const messages = await prisma.chatMessage.findMany({
+  const latest = await prisma.chatMessage.findMany({
     where: { companyId: company.id },
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 50,
   });
-  return NextResponse.json(messages);
+  return NextResponse.json(latest.reverse());
 }

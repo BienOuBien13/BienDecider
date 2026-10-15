@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AskPaulButton } from "@/components/ask-paul-button";
 import Link from "next/link";
 import type { Lead } from "@prisma/client";
 import { PERSONAS } from "@/lib/agents/personas";
@@ -214,6 +215,7 @@ export function ProspectionClient({
                             </a>
                           )}
                         </p>
+                        <AskPaulButton element={{ type: "lead", id: lead.id, title: lead.name }} />
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {NEXT[lead.stage]?.map((next) => (

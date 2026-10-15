@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
+import { AskPaulButton } from "@/components/ask-paul-button";
 import type { AuditFinding } from "@prisma/client";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { parseFindingActionItems, type FindingActionItem } from "@/lib/finding-shared";
@@ -36,6 +37,7 @@ export function FindingCard({ finding }: { finding: AuditFinding }) {
         <p className="mt-1 line-clamp-2 text-sm text-slate-600">{finding.content}</p>
         <span className="mt-1 inline-block text-xs text-indigo-600">Voir le détail →</span>
       </button>
+      <AskPaulButton element={{ type: "finding", id: finding.id, title: finding.title }} />
 
       <dialog ref={dialogRef} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-lg bg-white p-5 text-slate-900 shadow-xl backdrop:bg-black/40">
             <div className="flex items-start justify-between gap-3">

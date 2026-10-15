@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { AgentProposal, ChatMessage, ActionPlanItem } from "@prisma/client";
+import type { AgentProposal, ActionPlanItem } from "@prisma/client";
 import type { AgentRunView } from "@/lib/agent-run-types";
 import { waitForAgentRun } from "@/lib/agent-runs-client";
 import type { SafeCompany } from "@/lib/safe-company";
@@ -15,15 +15,15 @@ import { useAgentProfileCompletion } from "@/components/agent-profile-completion
 import { describeProgress, summarizeProposals } from "@/lib/proposal-progress";
 import { countByFilter, FILTER_LABELS, groupQueue, type QueueFilter } from "@/lib/validation-queue";
 import { needsAttention } from "@/lib/pending-decisions";
+import { openPaul } from "@/lib/paul-context";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
 
-export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
+export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
   company: SafeCompany;
   initialPlanItems: PlanItemWithProposals[];
   initialAgentRuns: AgentRunView[];
-  initialChatMessages: ChatMessage[];
   initialProposals: AgentProposal[];
   initialDiagnosticCount: number;
   initialView: View;
@@ -35,9 +35,6 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const [planItems, setPlanItems] = useState(initialPlanItems);
   const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
   const [proposals, setProposals] = useState(initialProposals);
-  const [chatMessages, setChatMessages] = useState(initialChatMessages);
-  const [chatInput, setChatInput] = useState("");
-  const [chatSending, setChatSending] = useState(false);
   const [planLoading, setPlanLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -211,25 +208,6 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     finally { setDirectionSaving(false); }
   }
 
-  async function handleSendChat(event: React.FormEvent) {
-    event.preventDefault();
-    if (!chatInput.trim() || chatSending) return;
-    const userText = chatInput;
-    setChatSending(true);
-    setError(null);
-    try {
-      const { reply } = await request("/api/co-ceo/message", "POST", { companyId: company.id, message: userText });
-      setChatInput("");
-      setChatMessages((previous) => [
-        ...previous,
-        { id: `tmp-${Date.now()}`, companyId: company.id, role: "user", content: userText, createdAt: new Date() },
-        { id: `tmp-${Date.now()}-a`, companyId: company.id, role: "assistant", content: reply, createdAt: new Date() },
-      ]);
-      await refresh();
-    } catch (error) { reportError(error); }
-    finally { setChatSending(false); }
-  }
-
   const activeItems = planItems.filter((item) => item.status !== "ecarte" && item.status !== "termine");
   const closedItems = planItems.filter((item) => item.status === "ecarte" || item.status === "termine");
   const actionable = proposals.filter((proposal) => needsAttention(proposal, facebookPageName));
@@ -242,7 +220,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const needsFirstDiagnostic = initialDiagnosticCount === 0 && planItems.length === 0;
   const emptyNextHref = needsFirstDiagnostic ? "/diagnostic" : "/dashboard?view=plan";
   const emptyNextLabel = needsFirstDiagnostic ? "Commencer par le diagnostic" : activeItems.length > 0 ? "Voir les actions du plan" : "Revenir au plan d'action";
-  const locked = busyId !== null || planLoading || chatSending;
+  const locked = busyId !== null || planLoading;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -427,15 +405,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
           </section>
           <section className="min-w-0">
             <h2 className="text-sm font-medium">Conversation avec {PERSONAS.co_ceo.name}</h2>
-            <div role="log" aria-label="Conversation" className="mt-2 max-h-80 space-y-3 overflow-y-auto py-2">
-              {chatMessages.length === 0 && <p className="text-sm text-slate-500">Aucun échange pour le moment.</p>}
-              {chatMessages.map((message) => <p key={message.id} className={`whitespace-pre-wrap break-words text-sm ${message.role === "user" ? "text-indigo-700" : "text-slate-600"}`}><span className="block text-xs font-medium">{message.role === "user" ? "Vous" : PERSONAS.co_ceo.name}</span>{message.content}</p>)}
-              {chatSending && <p className="text-sm text-slate-500">Paul réfléchit…</p>}
-            </div>
-            <form onSubmit={handleSendChat} className="mt-3 flex gap-2">
-              <input aria-label="Message à Paul" placeholder="Écrire à Paul…" value={chatInput} onChange={(event) => setChatInput(event.target.value)} className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm" />
-              <button type="submit" disabled={locked || !chatInput.trim()} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50">Envoyer</button>
-            </form>
+            <p className="mt-2 text-sm text-slate-600">{PERSONAS.co_ceo.name} est disponible sur chaque page avec le bouton « Parler à {PERSONAS.co_ceo.name} ». La conversation et votre brouillon sont conservés d&apos;une page à l&apos;autre.</p>
+            <button type="button" onClick={() => openPaul()} className="mt-2 min-h-11 rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">Ouvrir la discussion</button>
           </section>
         </div>
       </details>
