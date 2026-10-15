@@ -173,7 +173,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
         : status === "modifiee"
           ? "Cette version est approuvée. Aucune action n'a été exécutée automatiquement."
           : status === "validee"
-            ? "Production validée. La validation ne vaut pas publication ou envoi."
+            ? "Production approuvée. L'approbation ne vaut pas publication ou envoi."
             : "Production rejetée.");
       return true;
     } catch (error) {
@@ -251,7 +251,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
         </div>
         <Link href="/rapport" className="text-sm font-medium text-indigo-600 underline underline-offset-4">Voir les résultats</Link>
       </header>
-      <JourneyProgress
+      {initialView !== "validation" && <JourneyProgress
         objectiveComplete={Boolean(company.objective?.trim())}
         diagnosticComplete={initialDiagnosticCount > 0}
         planComplete={planItems.length > 0}
@@ -260,8 +260,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
         resultsAvailable={proposals.some((proposal) => proposal.status === "executee")}
         planLoading={planLoading}
         onPreparePlan={handleGeneratePlan}
-      />
-      <section className="mt-6 border-y border-slate-200 py-5" aria-labelledby="next-step">
+      />}
+      {initialView !== "validation" && <section className="mt-6 border-y border-slate-200 py-5" aria-labelledby="next-step">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prochaine étape</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
           <h2 id="next-step" className="max-w-xl text-lg font-medium">{actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision` : nextItem ? nextItem.title : runningItem ? `En cours : ${runningItem.title}` : needsFirstDiagnostic ? "Repérer les premières opportunités" : "Préparer les prochaines actions"}</h2>
@@ -277,7 +277,12 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <button onClick={handleGeneratePlan} disabled={locked} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50">{planLoading ? "Paul réfléchit…" : "Préparer le plan"}</button>
           )}
         </div>
-      </section>
+      </section>}
+      {initialView === "validation" && (
+        <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-800">
+          {actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision. Valider ou rejeter ne publie ni n'envoie rien.` : "Aucune production n'attend votre décision."}
+        </p>
+      )}
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
       {agentRuns.some((run) => run.status === "queued" || run.status === "running" || run.status === "failed") && <section className="mt-4 border-b border-slate-200 pb-4" aria-label="Exécutions récentes">
@@ -324,7 +329,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
               return (
                 <li key={item.id} className="py-5">
                   <div className="flex flex-wrap items-start gap-3">
-                    <span className="pt-1 text-sm text-slate-400">{index + 1}.</span>
+                    <span className="pt-1 text-sm text-slate-600">{index + 1}.</span>
                     <PersonaAvatar agentKey={item.agent as AgentKey} size={32} />
                     <div className="min-w-0 flex-1 basis-40">
                       <p className="text-xs text-slate-500">{persona?.name ?? item.agent} · {item.timing}</p>
@@ -382,7 +387,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <p className="text-sm text-slate-600">Aucune production traitée. Vos validations et refus resteront ici pour retrouver vos décisions.</p>
             <Link href={actionable.length > 0 ? "/dashboard?view=validation" : emptyNextHref} className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">{actionable.length > 0 ? "Examiner les productions" : emptyNextLabel}</Link>
           </div>}
-          {history.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} busy={locked} showAgent riskSettings={riskSettings} />)}
+          {history.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} />)}
           <h2 className="pt-4 font-medium">Actions terminées et écartées</h2>
           {closedItems.length === 0 && <p className="text-sm text-slate-500">Les actions terminées ou écartées du plan seront conservées ici.</p>}
           <ul className="divide-y divide-slate-200">
