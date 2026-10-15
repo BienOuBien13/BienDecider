@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { AskPaulButton } from "@/components/ask-paul-button";
 import Link from "next/link";
 import type { Lead } from "@prisma/client";
+import { LeadCard, type LeadPatch } from "@/components/lead-card";
 import { PERSONAS } from "@/lib/agents/personas";
 import { countLeads, MIN_CONTACTS_TO_CONCLUDE, type LeadStage } from "@/lib/funnel-shared";
+import { pickNextLead } from "@/lib/lead-followup";
 
 const STAGE_LABELS: Record<string, string> = {
   a_contacter: "À contacter",
@@ -14,24 +15,6 @@ const STAGE_LABELS: Record<string, string> = {
   rdv: "RDV pris",
   gagne: "Client",
   perdu: "Perdu",
-};
-
-/** Étapes suivantes déclarables depuis chaque étape — le dirigeant dit ce qui s'est passé, Pepito ne devine rien. */
-const NEXT: Record<string, LeadStage[]> = {
-  a_contacter: ["contacte", "perdu"],
-  contacte: ["repondu", "perdu"],
-  repondu: ["rdv", "gagne", "perdu"],
-  rdv: ["gagne", "perdu"],
-  gagne: [],
-  perdu: ["contacte"],
-};
-
-const ACTION_LABELS: Record<string, string> = {
-  contacte: "J'ai pris contact",
-  repondu: "Il a répondu",
-  rdv: "RDV pris",
-  gagne: "Devenu client",
-  perdu: "Sans suite",
 };
 
 const ORDER: LeadStage[] = ["a_contacter", "contacte", "repondu", "rdv", "gagne", "perdu"];
@@ -44,12 +27,19 @@ export function ProspectionClient({
   initialLeads,
   initialAutoOutreach,
   sendingConfigured,
+  companyName,
+  trade,
+  phone,
 }: {
   initialLeads: Lead[];
   initialAutoOutreach: boolean;
   sendingConfigured: boolean;
+  companyName: string;
+  trade: string | null;
+  phone: string | null;
 }) {
   const [leads, setLeads] = useState(initialLeads);
+  const [openedAt] = useState(() => Date.now());
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoOutreach, setAutoOutreach] = useState(initialAutoOutreach);
@@ -74,24 +64,32 @@ export function ProspectionClient({
     }
   }
 
-  async function declare(id: string, stage: LeadStage) {
+  async function patchLead(id: string, patch: LeadPatch): Promise<boolean> {
     setBusyId(id);
     setError(null);
     try {
       const res = await fetch(`/api/leads/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify(patch),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || "Impossible d'enregistrer");
       setLeads((prev) => prev.map((l) => (l.id === id ? data : l)));
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Impossible d'enregistrer");
+      return false;
     } finally {
       setBusyId(null);
     }
   }
+
+  const nextLead = pickNextLead(leads, openedAt);
+  const discarded = leads.filter((l) => l.stage === "ecarte");
+  const leadCard = (lead: Lead) => (
+    <LeadCard lead={lead} now={openedAt} busy={busyId === lead.id} companyName={companyName} trade={trade} phone={phone} onPatch={patchLead} />
+  );
 
   // Recalculé depuis l'état local (pas depuis `funnel`, figé au chargement
   // serveur) pour refléter une déclaration sans attendre un rechargement.
@@ -122,28 +120,13 @@ export function ProspectionClient({
         et déclarez ce qui s&apos;est passé. Chiffres calculés en base, jamais estimés par un agent.
       </p>
 
-      <section className="mt-4 rounded-lg border bg-white p-3">
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            checked={autoOutreach}
-            disabled={outreachSaving || !sendingConfigured}
-            onChange={(e) => toggleAutoOutreach(e.target.checked)}
-            className="mt-0.5 h-4 w-4"
-          />
-          <span className="text-sm">
-            <span className="font-medium text-slate-800">Laisser {PERSONAS.demarchage.name} prendre contact lui-même</span>{" "}
-            avec les prospects que vous validez, sans que vous ayez à envoyer l&apos;email vous-même. Désactivé par défaut :
-            c&apos;est vous qui décidez, prospect par prospect, de l&apos;activer ou non.
-            {!sendingConfigured && (
-              <span className="mt-1 block text-xs text-amber-600">
-                Pas encore activable : aucun fournisseur d&apos;envoi d&apos;email n&apos;est configuré côté serveur. Le réglage
-                sera mémorisé et appliqué dès qu&apos;un canal d&apos;envoi sera en place.
-              </span>
-            )}
-          </span>
-        </label>
-      </section>
+      {nextLead && (
+        <section aria-label="Prochain prospect à traiter" className="mt-4 rounded-lg border-2 border-indigo-200 bg-white p-3">
+          <h2 className="text-sm font-semibold text-indigo-900">Prochain prospect à traiter</h2>
+          <p className="mb-2 mt-1 text-xs text-slate-700">Informations rapportées par {PERSONAS.demarchage.name} depuis le web : confirmez-les sur la source avant de contacter.</p>
+          {leadCard(nextLead)}
+        </section>
+      )}
 
       <section className="mt-6 grid grid-cols-5 gap-2">
         {steps.map((s) => (
@@ -199,49 +182,49 @@ export function ProspectionClient({
             </h2>
             <ul className="mt-2 space-y-2">
               {leads
-                .filter((l) => l.stage === stage)
+                .filter((l) => l.stage === stage && l.id !== nextLead?.id)
                 .map((lead) => (
-                  <li key={lead.id} className="rounded-lg border bg-white p-3 text-sm">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <p className="font-medium">{lead.name}</p>
-                        <p className="mt-0.5 text-slate-600">{lead.reason}</p>
-                        <p className="mt-1 text-xs text-slate-600">
-                          {lead.segment && <span className="capitalize">{lead.segment} · </span>}
-                          {lead.publicContact && <span>{lead.publicContact} · </span>}
-                          {lead.source && (
-                            <a href={lead.source} target="_blank" rel="noreferrer" className="underline">
-                              source
-                            </a>
-                          )}
-                        </p>
-                        <AskPaulButton element={{ type: "lead", id: lead.id, title: lead.name }} />
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {NEXT[lead.stage]?.map((next) => (
-                          <button
-                            key={next}
-                            disabled={busyId === lead.id}
-                            onClick={() => declare(lead.id, next)}
-                            className={`rounded-lg border px-2 py-1 text-xs disabled:opacity-50 ${
-                              next === "gagne"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                                : next === "perdu"
-                                  ? "border-slate-200 text-slate-500"
-                                  : "border-indigo-200 bg-indigo-50 text-indigo-800"
-                            }`}
-                          >
-                            {ACTION_LABELS[next]}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </li>
+                  <li key={lead.id} className="rounded-lg border bg-white p-3">{leadCard(lead)}</li>
                 ))}
             </ul>
           </section>
         ))
       )}
+
+      {discarded.length > 0 && (
+        <details className="mt-6">
+          <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-slate-700">Écartés ({discarded.length})</summary>
+          <ul className="mt-2 space-y-2">
+            {discarded.map((lead) => <li key={lead.id} className="rounded-lg border bg-white p-3">{leadCard(lead)}</li>)}
+          </ul>
+        </details>
+      )}
+
+      <details className="mt-8 rounded-lg border bg-white p-3" open={sendingConfigured}>
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-slate-800">
+          Prise de contact automatique{sendingConfigured ? "" : " (pas encore disponible)"}
+        </summary>
+        <label className="mt-2 flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={autoOutreach}
+            disabled={outreachSaving || !sendingConfigured}
+            onChange={(e) => toggleAutoOutreach(e.target.checked)}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span className="text-sm">
+            <span className="font-medium text-slate-800">Laisser {PERSONAS.demarchage.name} prendre contact lui-même</span>{" "}
+            avec les prospects que vous validez, sans que vous ayez à envoyer l&apos;email vous-même. Désactivé par défaut :
+            c&apos;est vous qui décidez, prospect par prospect, de l&apos;activer ou non.
+            {!sendingConfigured && (
+              <span className="mt-1 block text-xs text-amber-900">
+                Pas encore activable : aucun fournisseur d&apos;envoi d&apos;email n&apos;est configuré côté serveur. Le réglage
+                sera mémorisé et appliqué dès qu&apos;un canal d&apos;envoi sera en place.
+              </span>
+            )}
+          </span>
+        </label>
+      </details>
     </div>
   );
 }

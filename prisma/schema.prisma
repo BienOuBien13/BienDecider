@@ -104,6 +104,8 @@ model Lead {
   repliedAt     DateTime?
   meetingAt     DateTime?
   closedAt      DateTime?
+  statusReason  String? // raison saisie par le dirigeant quand il écarte ou diffère le prospect
+  deferredUntil DateTime? // prospect différé : exclu du "prochain prospect" jusqu'à cette date
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }

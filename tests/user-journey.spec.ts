@@ -686,6 +686,104 @@ test("guided onboarding starts with three fields and keeps the full company page
   }
 });
 
+test("a prospect is verified, a message is prepared and copied without contact, then the real contact is declared, corrected, deferred or discarded", async ({ page, company, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const DAY = 24 * 60 * 60 * 1000;
+  const dayAgo = (days: number) => new Date(Date.now() - days * DAY).toISOString().slice(0, 10);
+  const display = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
+  try {
+    const base = { companyId: company.id, stage: "a_contacter", reason: "Organise des événements de quartier" };
+    const bare = await prisma.lead.create({ data: { ...base, name: "Association Sans Contact", createdAt: new Date(Date.now() - 3 * DAY) } });
+    const usable = await prisma.lead.create({ data: { ...base, name: "Association Complète", publicContact: "Formulaire sur asso.example", source: "https://asso.example/contact", segment: "associations" } });
+    const reload = (id: string) => prisma.lead.findUniqueOrThrow({ where: { id } });
+
+    await page.goto(`${baseURL}/prospection`);
+    const next = page.getByRole("region", { name: "Prochain prospect à traiter" });
+    await expect(next.getByText("Association Complète")).toBeVisible();
+    await expect(next.getByRole("link", { name: "source" })).toBeVisible();
+    const nextBox = await next.boundingBox();
+    const automationBox = await page.getByText("Prise de contact automatique").first().boundingBox();
+    expect(nextBox!.y).toBeLessThan(automationBox!.y);
+
+    await next.getByRole("button", { name: "Préparer un message" }).click();
+    await expect(next.getByLabel(/Message préparé/)).toHaveValue(/Association Complète/);
+    expect(await next.getByLabel(/Message préparé/).inputValue()).not.toMatch(/@/);
+    await next.getByRole("button", { name: "Copier le message" }).click();
+    await expect(next.getByRole("status")).toContainText("Rien n'a été envoyé");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("Association Complète");
+    expect(await reload(usable.id)).toMatchObject({ stage: "a_contacter", contactedAt: null });
+
+    const first = dayAgo(2);
+    await next.getByRole("button", { name: "J'ai pris contact" }).click();
+    await next.getByLabel("Date du contact").fill(first);
+    await next.getByRole("button", { name: "Enregistrer le contact" }).click();
+    await expect(page.getByText(`Contact déclaré le ${display(first)}.`)).toBeVisible();
+    expect(await reload(usable.id)).toMatchObject({ stage: "contacte" });
+    expect((await reload(usable.id)).contactedAt!.toISOString().slice(0, 10)).toBe(first);
+
+    const corrected = dayAgo(3);
+    const contactedCard = page.locator("li").filter({ hasText: "Association Complète" });
+    await contactedCard.getByRole("button", { name: "Modifier la date du contact" }).click();
+    await contactedCard.getByLabel("Date du contact").fill(corrected);
+    await contactedCard.getByRole("button", { name: "Enregistrer la date" }).click();
+    await expect(page.getByText(`Contact déclaré le ${display(corrected)}.`)).toBeVisible();
+    await contactedCard.getByRole("button", { name: "Ce n'était pas un contact" }).click();
+    await expect(next.getByText("Association Complète")).toBeVisible();
+    expect(await reload(usable.id)).toMatchObject({ stage: "a_contacter", contactedAt: null });
+
+    await next.getByRole("button", { name: "Différer", exact: true }).click();
+    await expect(next.getByRole("button", { name: "Différer ce prospect" })).toBeDisabled();
+    await next.getByLabel(/Raison du report/).fill("Salon la semaine prochaine");
+    await next.getByRole("button", { name: "Différer ce prospect" }).click();
+    await expect(next.getByText("Association Sans Contact")).toBeVisible();
+    expect(await reload(usable.id)).toMatchObject({ statusReason: "Salon la semaine prochaine" });
+    expect((await reload(usable.id)).deferredUntil).not.toBeNull();
+
+    await next.getByRole("button", { name: "Écarter", exact: true }).click();
+    await expect(next.getByRole("button", { name: "Écarter ce prospect" })).toBeDisabled();
+    await next.getByLabel(/Raison de l'écart/).fill("Hors zone");
+    await next.getByRole("button", { name: "Écarter ce prospect" }).click();
+    await expect(next).toHaveCount(0);
+    expect(await reload(bare.id)).toMatchObject({ stage: "ecarte", statusReason: "Hors zone" });
+    await page.getByText(/^Écartés \(1\)/).click();
+    await page.getByRole("button", { name: "Reprendre ce prospect" }).click();
+    await expect.poll(async () => (await reload(bare.id)).stage).toBe("a_contacter");
+    expect((await reload(bare.id)).statusReason).toBeNull();
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("the prospect follow-up API refuses invented progress, future contacts and unexplained discards", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  const DAY = 24 * 60 * 60 * 1000;
+  const day = (offset: number) => new Date(Date.now() + offset * DAY).toISOString().slice(0, 10);
+  try {
+    const lead = await prisma.lead.create({ data: { companyId: company.id, name: "Association A", reason: "Cible locale", stage: "a_contacter" } });
+    const pending = await prisma.lead.create({ data: { companyId: company.id, name: "Association B", reason: "Cible locale", stage: "propose" } });
+    const patch = (id: string, data: object) => page.request.patch(`${baseURL}/api/leads/${id}`, { data });
+    await page.goto(`${baseURL}/prospection`);
+
+    expect((await patch(lead.id, { stage: "gagne" })).status()).toBe(409);
+    expect((await patch(lead.id, { stage: "perdu" })).status()).toBe(409);
+    expect((await patch(lead.id, { stage: "ecarte" })).status()).toBe(400);
+    expect((await patch(lead.id, { stage: "contacte", contactedAt: day(5) })).status()).toBe(400);
+    expect((await patch(lead.id, { stage: "contacte", contactedAt: "2026-13-45" })).status()).toBe(400);
+    expect((await patch(lead.id, { deferUntil: day(-2), reason: "Trop tôt" })).status()).toBe(400);
+    expect((await patch(lead.id, { deferUntil: day(7) })).status()).toBe(400);
+    expect((await patch(lead.id, { contactedAt: day(-1) })).status()).toBe(409);
+    expect((await patch(pending.id, { stage: "contacte" })).status()).toBe(409);
+    expect(await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).toMatchObject({ stage: "a_contacter", contactedAt: null, deferredUntil: null, statusReason: null });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: pending.id } })).stage).toBe("propose");
+
+    expect((await patch(lead.id, { stage: "contacte", contactedAt: day(-1) })).status()).toBe(200);
+    expect((await patch(lead.id, { stage: "ecarte", reason: "Hors zone" })).status()).toBe(409);
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 test("Paul is reachable from any page, keeps the conversation and the draft, and knows the page and the consulted element", async ({ page, company }) => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
   try {
