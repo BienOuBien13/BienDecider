@@ -21,11 +21,12 @@ import { openPaul } from "@/lib/paul-context";
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
 
-export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
+export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialProposals, leadSources, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
   company: SafeCompany;
   initialPlanItems: PlanItemWithProposals[];
   initialAgentRuns: AgentRunView[];
   initialProposals: AgentProposal[];
+  leadSources: Record<string, string | null>;
   initialDiagnosticCount: number;
   initialView: View;
   riskSettings: Record<string, string>;
@@ -36,6 +37,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const [planItems, setPlanItems] = useState(initialPlanItems);
   const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
   const [proposals, setProposals] = useState(initialProposals);
+  const [currentLeadSources, setLeadSources] = useState(leadSources);
   const [planLoading, setPlanLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -180,11 +182,11 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     finally { setBusyId(null); }
   }
 
-  async function handleExecute(proposalId: string, expectedVersion: number, confirmed: true) {
+  async function handleExecute(proposalId: string, expectedVersion: number, confirmed: true, acknowledgedReviewIds: string[]) {
     setBusyId(proposalId);
     setError(null);
     try {
-      const result = await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion, confirmed });
+      const result = await request(`/api/proposals/${proposalId}/execute`, "POST", { expectedVersion, confirmed, acknowledgedReviewIds });
       setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
       setNotice(result?.message ?? "Publication effectuée. Elle figure dans les résultats.");
@@ -194,6 +196,22 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       await refresh().catch(() => undefined);
     }
     finally { setBusyId(null); }
+  }
+
+  async function handleSetLeadSource(proposalId: string, source: string): Promise<boolean> {
+    setBusyId(proposalId);
+    setError(null);
+    try {
+      await request(`/api/proposals/${proposalId}`, "PATCH", { leadSource: source });
+      setLeadSources((previous) => ({ ...previous, [proposalId]: source }));
+      setNotice("Source enregistrée. Vérifiez vous-même qu'elle correspond à l'organisation.");
+      return true;
+    } catch (error) {
+      reportError(error);
+      return false;
+    } finally {
+      setBusyId(null);
+    }
   }
 
   async function handleSaveDirection() {
@@ -358,7 +376,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <section key={group.key} aria-labelledby={`group-${group.key}`} className="space-y-3">
               <h2 id={`group-${group.key}`} className="text-sm font-semibold text-slate-800">{group.title} <span className="font-normal text-slate-600">({group.items.length})</span></h2>
               {group.items.map((proposal) => (
-                <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
+                <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} onSetLeadSource={handleSetLeadSource} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} companyPhone={company.phone} companyCertifications={company.certifications} leadSource={currentLeadSources[proposal.id]} />
               ))}
             </section>
           ))}

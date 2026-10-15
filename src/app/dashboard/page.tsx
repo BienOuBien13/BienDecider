@@ -20,7 +20,7 @@ export default async function DashboardPage({ searchParams }: {
   const company = await prisma.company.findUnique({ where: { ownerEmail } });
   if (!company || !company.name) redirect("/onboarding");
 
-  const [planItems, recentAgentRuns, proposals, diagnosticCount, riskSettings, facebookConnection] = await Promise.all([
+  const [planItems, recentAgentRuns, proposals, leads, diagnosticCount, riskSettings, facebookConnection] = await Promise.all([
     prisma.actionPlanItem.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "asc" },
@@ -39,6 +39,7 @@ export default async function DashboardPage({ searchParams }: {
       where: { companyId: company.id },
       orderBy: { createdAt: "desc" },
     }),
+    prisma.lead.findMany({ where: { companyId: company.id, proposalId: { not: null } }, select: { proposalId: true, source: true } }),
     prisma.auditFinding.count({ where: { companyId: company.id } }),
     getConfiguredRiskLevels(),
     prisma.channelConnection.findUnique({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } } }),
@@ -58,6 +59,7 @@ export default async function DashboardPage({ searchParams }: {
         initialPlanItems={planItems}
         initialAgentRuns={recentAgentRuns}
         initialProposals={proposals}
+        leadSources={Object.fromEntries(leads.map((lead) => [lead.proposalId!, lead.source]))}
         initialDiagnosticCount={diagnosticCount}
         riskSettings={riskSettings}
         facebookPageName={facebookPageName}

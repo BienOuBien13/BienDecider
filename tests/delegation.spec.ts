@@ -7,6 +7,7 @@ import { proposalStatusView } from "../src/lib/proposal-status";
 import { countByFilter, groupQueue, UNATTACHED_GROUP_TITLE } from "../src/lib/validation-queue";
 import { countPendingDecisions, needsAttention } from "../src/lib/pending-decisions";
 import { parsePaulReferenceMarkers } from "../src/lib/paul-references";
+import { decideProposalReview, reviewProposal, reviewPublishedSiteHtml } from "../src/lib/proposal-review";
 import { describePage } from "../src/lib/paul-context";
 import { buildOutreachDraft, dayToDate, formatDay, hasPlaceholders, leadReadiness, pickNextLead } from "../src/lib/lead-followup";
 import { describeRunProgress, finishedRunMessage, formatDuration, recentSucceededRuns, runResultHref } from "../src/lib/agent-run-progress";
@@ -146,6 +147,32 @@ test("Paul reference markers accept only typed internal object identifiers", () 
       { marker: "[[bd:finding:abc-7]]", type: "finding", id: "abc-7" },
     ]);
   expect(parsePaulReferenceMarkers("[[bd:proposal:https://example.com]] [[bd:lead:../other]]")).toEqual([]);
+});
+
+test("publication review separates unsupported claims, absent prices, changed contact details and missing prospect sources", () => {
+  const certification = reviewProposal({ kind: "social_post", content: "Entreprise certifiée RGE.", companyCertifications: null });
+  expect(certification[0]).toMatchObject({ id: "certification_unsupported", blocking: true, evidence: "Entreprise certifiée RGE." });
+  expect(decideProposalReview(certification, ["certification_unsupported"]).blockers).toEqual(certification);
+  expect(reviewProposal({ kind: "social_post", content: "Entreprise non certifiée RGE." })).toEqual([]);
+
+  const price = reviewProposal({ kind: "social_post", content: "Nos tarifs sont attractifs." });
+  expect(price[0]).toMatchObject({ id: "price_not_specified", blocking: false, requiresAcknowledgement: true });
+  expect(decideProposalReview(price).missingAcknowledgements).toEqual(price);
+  expect(decideProposalReview(price, ["price_not_specified"]).missingAcknowledgements).toEqual([]);
+
+  const phone = reviewProposal({ kind: "social_post", content: "Appelez-nous au 06 12 34 56 78.", companyPhone: "01 00 00 00 00" });
+  expect(phone[0]).toMatchObject({ id: "phone_mismatch", blocking: true, requiresAcknowledgement: false });
+  expect(reviewProposal({ kind: "social_post", content: "Appelez le 06 12 34 56 78 ou le 01 00 00 00 00.", companyPhone: "06 12 34 56 78" })[0]).toMatchObject({ id: "phone_mismatch", blocking: true });
+  expect(reviewProposal({ kind: "social_post", content: "Appelez-nous au 06 12 34 56 78.", companyPhone: "06 12 34 56 78" })[0]).toMatchObject({ id: "phone_profile_match", requiresAcknowledgement: true });
+
+  const source = reviewProposal({ kind: "prospect", content: "Association locale", leadSource: null });
+  expect(source[0]).toMatchObject({ id: "prospect_source_missing", blocking: true });
+  expect(decideProposalReview(source, ["prospect_source_missing"]).blockers).toEqual(source);
+  expect(reviewProposal({ kind: "prospect", content: "Association locale", leadSource: "http://localhost/source" })).toHaveLength(1);
+
+  expect(reviewPublishedSiteHtml("<html><style>.rge { width: 10px }</style><p>Entreprise certifiée RGE</p></html>").map((point) => point.id)).toContain("certification_unsupported");
+  const generatedPrice = reviewPublishedSiteHtml("<html><p>Nos tarifs sont attractifs.</p></html>");
+  expect(decideProposalReview(generatedPrice).missingAcknowledgements.map((point) => point.id)).toContain("price_not_specified");
 });
 
 test("Paul is told the page by name, never by the raw address the browser sent", () => {
