@@ -40,6 +40,9 @@ export async function POST(
   const expectedVersion = body && typeof body === "object" ? (body as { expectedVersion?: unknown }).expectedVersion : undefined;
   const confirmed = body && typeof body === "object" ? (body as { confirmed?: unknown }).confirmed : undefined;
   const acknowledgedReviewIds = body && typeof body === "object" ? (body as { acknowledgedReviewIds?: unknown }).acknowledgedReviewIds : undefined;
+  const acknowledgementIds = Array.isArray(acknowledgedReviewIds) && acknowledgedReviewIds.every((value) => typeof value === "string")
+    ? acknowledgedReviewIds as string[]
+    : [];
   if (confirmed !== true) {
     return NextResponse.json({ error: "Confirmez explicitement la destination et la mise en ligne." }, { status: 400 });
   }
@@ -55,9 +58,6 @@ export async function POST(
       companyPhone: profile?.phone,
       companyCertifications: profile?.certifications,
     });
-    const acknowledgementIds = Array.isArray(acknowledgedReviewIds) && acknowledgedReviewIds.every((value) => typeof value === "string")
-      ? acknowledgedReviewIds as string[]
-      : [];
     const review = decideProposalReview(reviewPoints, acknowledgementIds);
     if (review.blockers.length > 0) {
       return NextResponse.json({ error: `Publication bloquée : ${review.blockers.map((point) => point.title).join(" ; ")}.` }, { status: 409 });
