@@ -11,6 +11,7 @@ export function AppShell({
 }) {
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900">
+      <a href="#contenu" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-indigo-800">Aller au contenu</a>
       <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white p-4 md:flex">
         <Link href="/dashboard" className="mb-6 block px-3">
           <span className="text-lg font-semibold">BienDecider</span>
@@ -20,15 +21,15 @@ export function AppShell({
         </Link>
         <SidebarNav />
         <form action="/api/auth/logout" method="post" className="mt-auto px-3 pt-6">
-          <button type="submit" className="text-xs text-slate-400 hover:text-slate-700">
+          <button type="submit" className="min-h-11 text-sm text-slate-600 hover:text-slate-900">
             Déconnexion
           </button>
         </form>
-        <div className="flex flex-wrap gap-2 px-3 pt-2 text-[10px] text-slate-300">
-          <Link href="/cgu" className="hover:text-slate-500">CGU</Link>
-          <Link href="/confidentialite" className="hover:text-slate-500">Confidentialité</Link>
-          <Link href="/mentions-legales" className="hover:text-slate-500">Mentions légales</Link>
-          <a href="mailto:contact@biendecider.com" className="hover:text-slate-500">Contact</a>
+        <div className="flex flex-wrap gap-x-3 px-3 pt-2 text-xs text-slate-600">
+          <Link href="/cgu" className="inline-flex min-h-11 items-center hover:text-slate-900">CGU</Link>
+          <Link href="/confidentialite" className="inline-flex min-h-11 items-center hover:text-slate-900">Confidentialité</Link>
+          <Link href="/mentions-legales" className="inline-flex min-h-11 items-center hover:text-slate-900">Mentions légales</Link>
+          <a href="mailto:contact@biendecider.com" className="inline-flex min-h-11 items-center hover:text-slate-900">Contact</a>
         </div>
       </aside>
       <div className="min-w-0 flex-1">
@@ -41,12 +42,12 @@ export function AppShell({
           </div>
           </div>
           <details className="mt-3">
-            <summary className="cursor-pointer py-1 text-sm font-medium text-slate-600">Menu</summary>
+            <summary className="flex min-h-11 cursor-pointer items-center py-1 text-sm font-medium text-slate-700">Menu</summary>
             <SidebarNav />
-            <form action="/api/auth/logout" method="post" className="px-3 py-4"><button className="text-sm text-slate-500">Déconnexion</button></form>
+            <form action="/api/auth/logout" method="post" className="px-3 py-4"><button className="min-h-11 text-sm text-slate-700">Déconnexion</button></form>
           </details>
         </header>
-        <main className="mx-auto max-w-6xl break-words p-4 sm:p-6 md:p-8">{children}</main>
+        <main id="contenu" tabIndex={-1} className="mx-auto max-w-6xl break-words p-4 focus:outline-none sm:p-6 md:p-8">{children}</main>
       </div>
     </div>
   );

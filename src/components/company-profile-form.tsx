@@ -277,7 +277,7 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
                   />
                 </label>
               </div>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-slate-600">
                 Valeur d&apos;un client = ce qu&apos;il vous rapporte en tout (pas un seul achat) — pour une activité
                 récurrente, comptez la durée de la relation.
               </p>
@@ -318,7 +318,7 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
               rows={4}
               className="rounded border px-3 py-2 text-sm"
             />
-            <p className="-mt-1 text-xs text-gray-400">
+            <p className="-mt-1 text-xs text-slate-600">
               Utilisé par tous les agents pour écrire dans votre ton — inutile de choisir un style dans une liste.
             </p>
 

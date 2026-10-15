@@ -149,11 +149,11 @@ export function ProspectionClient({
           <div key={s.label} className="rounded-lg border bg-white p-3 text-center">
             <p className="text-2xl font-semibold">{s.value}</p>
             <p className="text-xs text-slate-500">{s.label}</p>
-            {s.rate && <p className="text-[11px] text-slate-400">{s.rate}</p>}
+            {s.rate && <p className="text-xs text-slate-600">{s.rate}</p>}
           </div>
         ))}
       </section>
-      <p className="mt-1 text-[11px] text-slate-400">
+      <p className="mt-1 text-xs text-slate-600">
         Taux affichés par rapport à l&apos;étape précédente. Les prospects marqués « sans suite » restent comptés comme contactés.
       </p>
 
@@ -169,7 +169,7 @@ export function ProspectionClient({
                     {s.counts.contactes} contactés · {s.counts.reponses} réponses · {s.counts.rdv} RDV · {s.counts.clients} clients
                   </span>
                   {s.counts.contactes < MIN_CONTACTS_TO_CONCLUDE && (
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
                       trop tôt pour conclure (moins de {MIN_CONTACTS_TO_CONCLUDE} contacts)
                     </span>
                   )}
@@ -194,7 +194,7 @@ export function ProspectionClient({
         ORDER.filter((stage) => leads.some((l) => l.stage === stage)).map((stage) => (
           <section key={stage} className="mt-6">
             <h2 className="text-sm font-medium text-slate-700">
-              {STAGE_LABELS[stage]} <span className="text-slate-400">({leads.filter((l) => l.stage === stage).length})</span>
+              {STAGE_LABELS[stage]} <span className="text-slate-600">({leads.filter((l) => l.stage === stage).length})</span>
             </h2>
             <ul className="mt-2 space-y-2">
               {leads
@@ -205,7 +205,7 @@ export function ProspectionClient({
                       <div>
                         <p className="font-medium">{lead.name}</p>
                         <p className="mt-0.5 text-slate-600">{lead.reason}</p>
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-slate-600">
                           {lead.segment && <span className="capitalize">{lead.segment} · </span>}
                           {lead.publicContact && <span>{lead.publicContact} · </span>}
                           {lead.source && (

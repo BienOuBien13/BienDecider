@@ -169,7 +169,7 @@ export default async function ConnexionsPage({
           })}
         </ul>
 
-        <p className="mt-6 text-xs text-gray-400">
+        <p className="mt-6 text-xs text-slate-600">
           Avant un envoi ou une publication, le canal, la destination et l&apos;étape à confirmer sont indiqués avec la proposition.
         </p>
       </div>

@@ -22,11 +22,11 @@ export function SidebarNav() {
         const active = pathname === item.href || pathname.startsWith(item.href + "/");
         return (
           <div key={item.href}>
-          {(index === 0 || ITEMS[index - 1].group !== item.group) && <p className="px-3 pb-2 pt-5 text-xs font-medium uppercase tracking-wide text-slate-400">{item.group}</p>}
+          {(index === 0 || ITEMS[index - 1].group !== item.group) && <p className="px-3 pb-2 pt-5 text-xs font-medium uppercase tracking-wide text-slate-600">{item.group}</p>}
           <Link
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`block rounded-lg px-3 py-2.5 text-sm transition ${
+            className={`block min-h-11 rounded-lg px-3 py-2.5 text-sm transition ${
               active
                 ? "bg-indigo-600 text-white"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"

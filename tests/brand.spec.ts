@@ -95,3 +95,60 @@ test("the privacy policy distinguishes processing from publication and is reacha
   await expect(page.locator("main")).toContainText("Traitement et publication sont deux choses distinctes");
   await expect(page.locator("body")).not.toContainText("Rien n'est partagé");
 });
+
+test("public pages keep named fields, a visible focus ring and readable text", async ({ page }) => {
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const path of ["/", "/login", "/signup", "/cgu", "/confidentialite", "/mentions-legales"]) {
+      await page.goto(`${baseURL}${path}`);
+      const unnamed = await page.evaluate(() => [...document.querySelectorAll("input:not([type=hidden]), select, textarea")]
+        .filter((field) => !(field.getAttribute("aria-label") || field.getAttribute("aria-labelledby") || (field as HTMLInputElement).labels?.length))
+        .map((field) => field.outerHTML.slice(0, 80)));
+      expect(unnamed, `${path} champs sans libellé`).toEqual([]);
+
+      // Contraste mesuré sur le rendu réel : Tailwind 4 exprime ses couleurs en oklch, que le canvas convertit en rgb.
+      const low = await page.evaluate(() => {
+        const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+        const toRgb = (css: string) => {
+          canvas.clearRect(0, 0, 1, 1);
+          canvas.fillStyle = "#000";
+          canvas.fillStyle = css;
+          canvas.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = canvas.getImageData(0, 0, 1, 1).data;
+          return { r, g, b, a: a / 255 };
+        };
+        const luminance = ({ r, g, b }: { r: number; g: number; b: number }) => {
+          const [lr, lg, lb] = [r, g, b].map((value) => { const c = value / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+          return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+        };
+        const background = (element: Element | null) => {
+          for (let node = element; node; node = node.parentElement) {
+            const color = toRgb(getComputedStyle(node).backgroundColor);
+            if (color.a > 0.99) return color;
+          }
+          return { r: 255, g: 255, b: 255, a: 1 };
+        };
+        const failures: string[] = [];
+        for (const element of document.querySelectorAll("main *, footer *, aside *")) {
+          if (![...element.childNodes].some((child) => child.nodeType === 3 && child.textContent?.trim())) continue;
+          const style = getComputedStyle(element);
+          if (style.visibility === "hidden" || style.display === "none") continue;
+          const foreground = toRgb(style.color);
+          const back = background(element);
+          const [a, b] = [luminance(foreground), luminance(back)];
+          const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+          const size = parseFloat(style.fontSize);
+          if (ratio < 4.5 || size < 12) failures.push(`${element.tagName.toLowerCase()} « ${(element.textContent ?? "").trim().slice(0, 30)} » ${ratio.toFixed(2)}:1 ${size}px`);
+        }
+        return failures.slice(0, 5);
+      });
+      expect(low, `${path} contraste ou taille de texte`).toEqual([]);
+    }
+  }
+
+  await page.goto(`${baseURL}/login`);
+  await page.keyboard.press("Tab");
+  const outline = await page.evaluate(() => { const style = getComputedStyle(document.activeElement!); return { width: parseFloat(style.outlineWidth), style: style.outlineStyle }; });
+  expect(outline.style).not.toBe("none");
+  expect(outline.width).toBeGreaterThanOrEqual(2);
+});
