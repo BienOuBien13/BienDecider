@@ -4,8 +4,9 @@ import { getSessionCompany } from "@/lib/session";
 import { syncPlanItemStatus } from "@/lib/plan-item-status";
 
 // "brouillon" enregistre une version sans décision ; "validee"/"modifiee"
-// approuvent la version courante (avec ou sans nouveau contenu) ; "rejetee" refuse.
-const ALLOWED_STATUSES = ["brouillon", "validee", "modifiee", "rejetee"] as const;
+// approuvent la version courante (avec ou sans nouveau contenu) ; "rejetee" refuse ;
+// "a_relire" rouvre un rejet (rien n'a été exécuté, donc la décision reste réversible).
+const ALLOWED_STATUSES = ["brouillon", "validee", "modifiee", "rejetee", "a_relire"] as const;
 type RequestedStatus = (typeof ALLOWED_STATUSES)[number];
 
 const VERSION_CONFLICT = "Cette production a changé depuis son ouverture. Rechargez la page pour voir la dernière version avant de décider.";
@@ -53,7 +54,10 @@ export async function PATCH(
   }
 
   const wasApproved = ["validee", "modifiee"].includes(existing.status);
-  if (existing.status === "rejetee" || existing.status === "executee" || (wasApproved && status === "rejetee")) {
+  if (status === "a_relire" && existing.status !== "rejetee") {
+    return NextResponse.json({ error: "Seule une production rejetée peut être rouverte." }, { status: 409 });
+  }
+  if (status !== "a_relire" && (existing.status === "rejetee" || existing.status === "executee" || (wasApproved && status === "rejetee"))) {
     return NextResponse.json({ error: "Cette production est déjà décidée ou réalisée." }, { status: 409 });
   }
   if (wasApproved && existing.kind === "prospect") {
@@ -72,7 +76,9 @@ export async function PATCH(
   // Décision humaine actée ici — aucune exécution réelle déclenchée
   // automatiquement (cf. docs/architecture-technique.md § Flux de validation).
   const data =
-    status === "brouillon"
+    status === "a_relire"
+      ? { status: "en_attente", rejectionReason: null, decidedAt: null }
+      : status === "brouillon"
       ? // Modifier une version approuvée retire l'approbation : elle redevient à relire.
         { content: newContent, version, status: "en_attente", draftSavedAt: now }
       : status === "rejetee"
@@ -103,7 +109,7 @@ export async function PATCH(
   if (existing.kind === "prospect" && status !== "brouillon") {
     await prisma.lead.updateMany({
       where: { proposalId: id, stage: { in: ["propose", "a_contacter", "ecarte"] } },
-      data: { stage: status === "rejetee" ? "ecarte" : "a_contacter" },
+      data: { stage: status === "rejetee" ? "ecarte" : status === "a_relire" ? "propose" : "a_contacter" },
     });
   }
 

@@ -19,7 +19,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 export type ProposalDecision = {
-  status: "brouillon" | "validee" | "modifiee" | "rejetee";
+  status: "brouillon" | "validee" | "modifiee" | "rejetee" | "a_relire";
   expectedVersion: number;
   content?: string;
   rejectionReason?: string;
@@ -193,6 +193,14 @@ export function ProposalCard({
       )}
       {proposal.status === "rejetee" && proposal.rejectionReason && (
         <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600"><span className="font-medium">Raison du rejet : </span>{proposal.rejectionReason}</p>
+      )}
+      {proposal.status === "rejetee" && (
+        <div className="mt-3">
+          <button type="button" onClick={() => decide({ status: "a_relire" })} disabled={busy} className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-800 disabled:opacity-50">
+            Rouvrir pour relecture
+          </button>
+          <p className="mt-1 text-xs text-slate-600">Rien n&apos;a été publié ni envoyé : vous pouvez revenir sur ce rejet.</p>
+        </div>
       )}
       {proposal.status === "en_attente" && rejecting && (
         <form onSubmit={rejectProposal} className="mt-3 space-y-2">

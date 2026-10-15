@@ -5,6 +5,7 @@ import { describeProgress, isActionDone, summarizeProposals } from "../src/lib/p
 import { getApprovalConsequence } from "../src/lib/channel-capabilities";
 import { proposalStatusView } from "../src/lib/proposal-status";
 import { countByFilter, groupQueue, UNATTACHED_GROUP_TITLE } from "../src/lib/validation-queue";
+import { countPendingDecisions, needsAttention } from "../src/lib/pending-decisions";
 
 test("risk rules use registered kinds and contextual factors, then fail closed", () => {
   expect(assessActionRisk("piste_croissance").level).toBe("modere");
@@ -119,4 +120,17 @@ test("the validation queue groups by action, keeps unattached items in their own
   expect(groupQueue([items[0]], "a_relire", titles)).toEqual([]);
   expect(countByFilter(items)).toEqual({ all: 5, a_relire: 2, approuvees: 2, a_verifier: 1 });
   expect(groupQueue([], "all", titles)).toEqual([]);
+});
+
+test("pending decisions count what waits for the owner, and a manual-only approval does not", () => {
+  const p = (status: string, kind = "social_post") => ({ status, kind });
+  expect(needsAttention(p("en_attente"), null)).toBe(true);
+  expect(needsAttention(p("publication_incertaine"), null)).toBe(true);
+  expect(needsAttention(p("validee", "site_web_content"), null)).toBe(true);
+  expect(needsAttention(p("validee"), null)).toBe(false);
+  expect(needsAttention(p("validee"), "Page")).toBe(true);
+  expect(needsAttention(p("rejetee"), "Page")).toBe(false);
+  expect(needsAttention(p("executee", "site_web_content"), "Page")).toBe(false);
+  expect(countPendingDecisions([p("en_attente"), p("validee"), p("validee", "site_web_content"), p("rejetee")], null)).toBe(2);
+  expect(countPendingDecisions([], "Page")).toBe(0);
 });

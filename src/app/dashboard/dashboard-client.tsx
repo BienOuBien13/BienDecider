@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AgentProposal, ChatMessage, ActionPlanItem } from "@prisma/client";
 import type { AgentRunView } from "@/lib/agent-run-types";
@@ -13,17 +14,10 @@ import { JourneyProgress } from "@/components/journey-progress";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 import { describeProgress, summarizeProposals } from "@/lib/proposal-progress";
 import { countByFilter, FILTER_LABELS, groupQueue, type QueueFilter } from "@/lib/validation-queue";
+import { needsAttention } from "@/lib/pending-decisions";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
-
-function needsAttention(proposal: AgentProposal, facebookPageName: string | null) {
-  const approved = ["validee", "modifiee"].includes(proposal.status);
-  return proposal.status === "en_attente" ||
-    proposal.status === "publication_incertaine" ||
-    (proposal.kind === "site_web_content" && approved) ||
-    (proposal.kind === "social_post" && approved && facebookPageName !== null);
-}
 
 export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
   company: SafeCompany;
@@ -37,6 +31,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   facebookPageName: string | null;
 }) {
   const { requestProfile, profileDialog, checking } = useAgentProfileCompletion();
+  const router = useRouter();
   const [planItems, setPlanItems] = useState(initialPlanItems);
   const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
   const [proposals, setProposals] = useState(initialProposals);
@@ -65,6 +60,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     setPlanItems(nextPlan);
     setProposals(nextProposals);
     setAgentRuns(nextRuns.runs);
+    router.refresh();
     return nextProposals;
   }
 
@@ -170,7 +166,9 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       });
       if (status !== "brouillon") setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
-      setNotice(status === "brouillon"
+      setNotice(status === "a_relire"
+        ? "Production rouverte : elle est de nouveau à relire dans la file À valider."
+        : status === "brouillon"
         ? "Brouillon enregistré. Il n'est pas approuvé : rien ne sera publié ni envoyé."
         : status === "modifiee"
           ? "Cette version est approuvée. Aucune action n'a été exécutée automatiquement."

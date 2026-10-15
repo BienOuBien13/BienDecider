@@ -356,6 +356,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(page.locator("article")).toHaveCount(0);
     await page.getByRole("link", { name: "À valider 3", exact: true }).click();
     await expect(page.locator("article")).toHaveCount(3);
+    await expect(page.getByRole("link", { name: "Productions à valider 3", exact: true }).first()).toBeVisible();
     await expect(page.getByText("Risque élevé", { exact: true })).toHaveCount(3);
     await expect(page.getByText("Risque modéré", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Risque élevé", { exact: true }).first()).toBeVisible();
@@ -399,6 +400,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await planned.getByRole("button", { name: "Confirmer le rejet", exact: true }).click();
     await expect(planned.getByText("Rejetée", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 1", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Productions à valider 1", exact: true }).first()).toBeVisible();
     const site = await prisma.agentProposal.findFirstOrThrow({ where: { companyId: company.id, kind: "site_web_content" } });
     await page.route(`**/api/proposals/${site.id}/execute`, async (route) => {
       expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true });
@@ -461,6 +463,15 @@ test("rejection reasons are optional, persisted in history and available to agen
     await page.goto(`${baseURL}/dashboard?view=historique`);
     await page.reload();
     await expect(page.locator("article").filter({ hasText: proposal.title }).getByText("Raison du rejet : Hors de ma zone d'intervention", { exact: true })).toBeVisible();
+
+    // Un rejet se rouvre tant que rien n'a été exécuté : retour à relire, motif effacé, prospect de nouveau proposé.
+    expect((await patch({ status: "a_relire" })).status()).toBe(400);
+    await page.locator("article").filter({ hasText: proposal.title }).getByRole("button", { name: "Rouvrir pour relecture" }).click();
+    await expect(page.getByText("Production rouverte", { exact: false })).toBeVisible();
+    const reopened = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+    expect(reopened).toMatchObject({ status: "en_attente", rejectionReason: null, decidedAt: null });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("propose");
+    expect((await patch({ status: "a_relire", expectedVersion: reopened.version })).status()).toBe(409);
 
     const optional = await prisma.agentProposal.create({ data: {
       companyId: company.id, agent: "contenu", kind: "social_post", title: "Refus sans motif", content: "Publication proposée",
