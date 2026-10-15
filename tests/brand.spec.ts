@@ -72,3 +72,26 @@ test("BienDecider public identity, metadata, contact and responsive pages", asyn
   await expect(page.getByRole("heading", { name: "Créer un compte", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Se connecter", exact: true })).toHaveAttribute("href", "/login");
 });
+test("login and signup fields have permanent labels, autocomplete and a password toggle", async ({ page }) => {
+  for (const [path, autocomplete] of [["/login", "current-password"], ["/signup", "new-password"]] as const) {
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.goto(`${baseURL}${path}`);
+    const email = page.getByLabel("Adresse e-mail", { exact: true });
+    const password = page.getByLabel("Mot de passe", { exact: true });
+    await expect(email).toHaveAttribute("autocomplete", "email");
+    await expect(password).toHaveAttribute("autocomplete", autocomplete);
+    await password.fill("secret-test");
+    await expect(password).toHaveAttribute("type", "password");
+    await page.getByLabel("Afficher le mot de passe", { exact: true }).check();
+    await expect(password).toHaveAttribute("type", "text");
+    await expect(password).toHaveValue("secret-test");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+});
+
+test("the privacy policy distinguishes processing from publication and is reachable without a session", async ({ page }) => {
+  await page.goto(`${baseURL}/confidentialite#traitement`);
+  await expect(page.getByRole("heading", { name: "Sous-traitants et destinataires" })).toBeVisible();
+  await expect(page.locator("main")).toContainText("Traitement et publication sont deux choses distinctes");
+  await expect(page.locator("body")).not.toContainText("Rien n'est partagé");
+});
