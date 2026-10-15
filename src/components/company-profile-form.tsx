@@ -198,8 +198,9 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
 
         <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3">
           {(!guided || profileInterpreted) && <>
-            <label className="text-sm font-medium">Quel est votre objectif principal ?</label>
+            <label htmlFor="profile-objective" className="text-sm font-medium">Quel est votre objectif principal ?</label>
             <input
+              id="profile-objective"
               placeholder="ex: 10 nouveaux clients par mois"
               value={objective}
               onChange={(e) => setObjective(e.target.value)}
@@ -212,27 +213,38 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
               <legend className="px-1 text-sm font-medium">Votre objectif en chiffres</legend>
               <p className="mb-3 text-xs text-slate-500">
                 Déclaratif et approximatif, ça suffit. BienDecider calcule l&apos;écart et le nombre de clients à aller chercher,
-                puis mesure si ses actions vous en rapprochent. Rien n&apos;est partagé.
+                puis mesure si ses actions vous en rapprochent. Ces chiffres servent à préparer votre travail avec nos prestataires
+                d&apos;IA ; ils ne sont pas publiés. Les informations de présentation de votre entreprise peuvent figurer
+                dans un contenu que vous approuvez avant publication.{" "}
+                <a href="/confidentialite#traitement" className="underline">Voir la politique de confidentialité</a>.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="CA mensuel actuel (€)"
-                  value={monthlyRevenue}
-                  onChange={(e) => setMonthlyRevenue(e.target.value)}
-                  className="rounded border px-3 py-2 text-sm"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="CA mensuel visé (€)"
-                  value={revenueTarget}
-                  onChange={(e) => setRevenueTarget(e.target.value)}
-                  className="rounded border px-3 py-2 text-sm"
-                />
-                <label className="flex flex-col gap-1 text-xs text-slate-500">
-                  Échéance
+                <label htmlFor="profile-revenue" className="flex flex-col gap-1 text-xs text-slate-600">
+                  Chiffre d&apos;affaires mensuel actuel (€ par mois)
+                  <input
+                    id="profile-revenue"
+                    type="number"
+                    min={0}
+                    placeholder="CA mensuel actuel (€)"
+                    value={monthlyRevenue}
+                    onChange={(e) => setMonthlyRevenue(e.target.value)}
+                    className="rounded border px-3 py-2 text-sm text-slate-900"
+                  />
+                </label>
+                <label htmlFor="profile-revenue-target" className="flex flex-col gap-1 text-xs text-slate-600">
+                  Chiffre d&apos;affaires mensuel visé (€ par mois)
+                  <input
+                    id="profile-revenue-target"
+                    type="number"
+                    min={0}
+                    placeholder="CA mensuel visé (€)"
+                    value={revenueTarget}
+                    onChange={(e) => setRevenueTarget(e.target.value)}
+                    className="rounded border px-3 py-2 text-sm text-slate-900"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-slate-600">
+                  Échéance (mois visé)
                   <input
                     type="month"
                     value={targetDate}
@@ -240,22 +252,30 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
                     className="rounded border px-3 py-2 text-sm text-slate-900"
                   />
                 </label>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="Valeur moyenne d'un client (€)"
-                  value={averageClientValue}
-                  onChange={(e) => setAverageClientValue(e.target.value)}
-                  className="rounded border px-3 py-2 text-sm"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="Nouveaux clients par mois aujourd'hui"
-                  value={newClientsPerMonth}
-                  onChange={(e) => setNewClientsPerMonth(e.target.value)}
-                  className="rounded border px-3 py-2 text-sm sm:col-span-2"
-                />
+                <label htmlFor="profile-client-value" className="flex flex-col gap-1 text-xs text-slate-600">
+                  Valeur moyenne d&apos;un client (€ au total)
+                  <input
+                    id="profile-client-value"
+                    type="number"
+                    min={0}
+                    placeholder="Valeur moyenne d'un client (€)"
+                    value={averageClientValue}
+                    onChange={(e) => setAverageClientValue(e.target.value)}
+                    className="rounded border px-3 py-2 text-sm text-slate-900"
+                  />
+                </label>
+                <label htmlFor="profile-new-clients" className="flex flex-col gap-1 text-xs text-slate-600 sm:col-span-2">
+                  Nouveaux clients par mois aujourd&apos;hui (nombre par mois)
+                  <input
+                    id="profile-new-clients"
+                    type="number"
+                    min={0}
+                    placeholder="Nouveaux clients par mois aujourd'hui"
+                    value={newClientsPerMonth}
+                    onChange={(e) => setNewClientsPerMonth(e.target.value)}
+                    className="rounded border px-3 py-2 text-sm text-slate-900"
+                  />
+                </label>
               </div>
               <p className="mt-2 text-xs text-slate-400">
                 Valeur d&apos;un client = ce qu&apos;il vous rapporte en tout (pas un seul achat) — pour une activité
@@ -264,7 +284,9 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
             </fieldset>
           </>}
 
+          <label htmlFor="profile-name" className="text-sm font-medium">Nom commercial</label>
           <input
+            id="profile-name"
             required
             placeholder="Nom commercial"
             value={name}
@@ -274,7 +296,9 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
 
           <TradeCombobox value={trade} onChange={setTrade} />
 
+          <label htmlFor="profile-area" className="text-sm font-medium">Zone de chalandise (là où vous trouvez vos clients)</label>
           <input
+            id="profile-area"
             required
             placeholder="Zone de chalandise (ex: Lyon et alentours)"
             value={servingArea}
@@ -283,10 +307,11 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
           />
 
           {!guided && <>
-            <label className="mt-2 text-sm font-medium">
+            <label htmlFor="profile-description" className="mt-2 text-sm font-medium">
               Décrivez votre entreprise, votre savoir-faire et ce qui vous différencie
             </label>
             <textarea
+              id="profile-description"
               placeholder="ex: Cabinet familial depuis 15 ans, spécialisé en rééducation sportive, accueil chaleureux et sans attente..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -298,32 +323,46 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
             </p>
 
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
-              <input
-                placeholder="Téléphone affiché aux clients (optionnel)"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="rounded border px-3 py-2 text-sm"
-              />
-              <input
-                placeholder="Certifications / labels (ex: RGE, optionnel)"
-                value={certifications}
-                onChange={(e) => setCertifications(e.target.value)}
-                className="rounded border px-3 py-2 text-sm"
-              />
+              <label htmlFor="profile-phone" className="flex flex-col gap-1 text-xs text-slate-600">
+                Téléphone affiché aux clients (facultatif)
+                <input
+                  id="profile-phone"
+                  placeholder="Téléphone affiché aux clients (optionnel)"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="rounded border px-3 py-2 text-sm text-slate-900"
+                />
+              </label>
+              <label htmlFor="profile-certifications" className="flex flex-col gap-1 text-xs text-slate-600">
+                Certifications et labels (facultatif)
+                <input
+                  id="profile-certifications"
+                  placeholder="Certifications / labels (ex: RGE, optionnel)"
+                  value={certifications}
+                  onChange={(e) => setCertifications(e.target.value)}
+                  className="rounded border px-3 py-2 text-sm text-slate-900"
+                />
+              </label>
             </div>
+            <label htmlFor="profile-hours" className="text-sm font-medium">Horaires d&apos;ouverture (facultatif)</label>
             <input
+              id="profile-hours"
               placeholder="Horaires d'ouverture (optionnel)"
               value={openingHours}
               onChange={(e) => setOpeningHours(e.target.value)}
               className="rounded border px-3 py-2 text-sm"
             />
+            <label htmlFor="profile-website" className="text-sm font-medium">Site web (facultatif)</label>
             <input
+              id="profile-website"
               placeholder="Site web (optionnel — beaucoup de TPE n'en ont pas)"
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
               className="rounded border px-3 py-2 text-sm"
             />
+            <label htmlFor="profile-social" className="text-sm font-medium">Compte Instagram ou Facebook (facultatif)</label>
             <input
+              id="profile-social"
               placeholder="Compte Instagram/Facebook (optionnel, ex: @cabinet_demo)"
               value={socialHandles}
               onChange={(e) => setSocialHandles(e.target.value)}
@@ -338,7 +377,7 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
           >
             {loading ? "Enregistrement…" : isNew ? "Valider et lancer mon audit" : "Enregistrer"}
           </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         </form>
       </div>
     </AppShell>

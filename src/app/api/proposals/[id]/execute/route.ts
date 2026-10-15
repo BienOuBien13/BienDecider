@@ -6,6 +6,7 @@ import { getSessionCompany } from "@/lib/session";
 import { publishProposalToFacebook } from "@/lib/social/facebook-publish";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 import { AgentRunQuotaError } from "@/lib/agent-runs";
+import { syncPlanItemStatus } from "@/lib/plan-item-status";
 
 export const maxDuration = 60;
 
@@ -48,9 +49,11 @@ export async function POST(
     if (proposal.kind === "social_post") {
       const riskSettings = await getConfiguredRiskLevels();
       const { message } = await publishProposalToFacebook(id, company.id, expectedVersion as number, { configuredRiskLevel: riskSettings[proposal.kind] });
+      if (proposal.planItemId) await syncPlanItemStatus(proposal.planItemId);
       return NextResponse.json({ message });
     }
     const { slug } = await publishSiteFromProposal(id, expectedVersion as number);
+    if (proposal.planItemId) await syncPlanItemStatus(proposal.planItemId);
     return NextResponse.json({ url: `/site/${slug}`, message: "Site publié. La publication figure dans les résultats." });
   } catch (error) {
     console.error("Erreur exécution proposition:", error);

@@ -11,6 +11,7 @@ import { PersonaAvatar } from "@/components/persona-avatar";
 import { ProposalCard, type ProposalDecision } from "@/components/proposal-card";
 import { JourneyProgress } from "@/components/journey-progress";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
+import { describeProgress, summarizeProposals } from "@/lib/proposal-progress";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
@@ -71,7 +72,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error ?? "L'opération a échoué. Réessayez.");
+    if (!response.ok) throw Object.assign(new Error(data?.error ?? "L'opération a échoué. Réessayez."), { status: response.status });
     return data;
   }
 
@@ -175,7 +176,12 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             ? "Production validée. La validation ne vaut pas publication ou envoi."
             : "Production rejetée.");
       return true;
-    } catch (error) { reportError(error); return false; }
+    } catch (error) {
+      reportError(error);
+      // Version périmée : on réaffiche la dernière version pour que le dirigeant voie ce qui a changé avant de décider.
+      if ((error as { status?: number }).status === 409) await refresh().catch(() => undefined);
+      return false;
+    }
     finally { setBusyId(null); }
   }
 
@@ -313,6 +319,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             {activeItems.map((item, index) => {
               const persona = PERSONAS[item.agent as AgentKey];
               const count = proposals.filter((proposal) => proposal.planItemId === item.id && needsAttention(proposal, facebookPageName)).length;
+              const progress = summarizeProposals(proposals.filter((proposal) => proposal.planItemId === item.id));
+              const progressParts = describeProgress(progress);
               return (
                 <li key={item.id} className="py-5">
                   <div className="flex flex-wrap items-start gap-3">
@@ -322,6 +330,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
                       <p className="text-xs text-slate-500">{persona?.name ?? item.agent} · {item.timing}</p>
                       <h3 className="mt-1 font-medium">{item.title}</h3>
                       <details className="mt-2 text-sm text-slate-600"><summary className="cursor-pointer text-xs">Pourquoi cette action ?</summary><p className="mt-2">{item.rationale}</p></details>
+                      {progressParts.length > 0 && <p className="mt-2 text-xs text-slate-600">Avancement : {progressParts.join(" · ")}.</p>}
+                      {progress.total > 0 && progress.rejected === progress.total && <p className="mt-1 text-xs text-slate-600">Rien n&apos;a été retenu : l&apos;action reste ouverte. Précisez votre consigne à l&apos;équipe pour obtenir une autre proposition.</p>}
                     </div>
                     {item.status === "en_cours" ? (
                       <div className="flex items-center gap-3">
@@ -359,7 +369,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
           </div>}
           {validationItems.map((proposal) => (
             <div key={proposal.id}>
-              <p className="mb-2 text-xs text-slate-500">{planItems.find((item) => item.id === proposal.planItemId)?.title ?? "Demande ponctuelle à l'équipe"}</p>
+              <p className="mb-2 text-xs text-slate-600">Action d&apos;origine : {planItems.find((item) => item.id === proposal.planItemId)?.title ?? "demande ponctuelle à l'équipe"}</p>
               <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
             </div>
           ))}
