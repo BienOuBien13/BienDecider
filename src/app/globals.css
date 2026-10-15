@@ -24,3 +24,10 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Focus clavier toujours visible, y compris sur fond sombre ou dans une carte. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid #4338ca;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px #ffffff;
+}

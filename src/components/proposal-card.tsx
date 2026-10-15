@@ -5,18 +5,7 @@ import { useState } from "react";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { assessActionRisk } from "@/lib/delegation-risk";
 import { getApprovalConsequence, getProposalGuidance } from "@/lib/channel-capabilities";
-
-export const STATUS_LABELS: Record<string, string> = {
-  en_attente: "À valider",
-  validee: "Validée",
-  modifiee: "Modifiée",
-  rejetee: "Rejetée",
-  executee: "Réalisée",
-  envoi_en_cours: "Envoi en cours",
-  envoi_incertain: "Envoi à vérifier dans Gmail",
-  publication_en_cours: "Publication en cours",
-  publication_incertaine: "Publication à vérifier sur Facebook",
-};
+import { proposalStatusView, STATUS_TONE_CLASSES } from "@/lib/proposal-status";
 
 const KIND_LABELS: Record<string, string> = {
   gbp_update: "Mise à jour de fiche établissement Google",
@@ -30,7 +19,7 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 export type ProposalDecision = {
-  status: "brouillon" | "validee" | "modifiee" | "rejetee";
+  status: "brouillon" | "validee" | "modifiee" | "rejetee" | "a_relire";
   expectedVersion: number;
   content?: string;
   rejectionReason?: string;
@@ -72,6 +61,7 @@ export function ProposalCard({
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const persona = PERSONAS[proposal.agent as Exclude<AgentKey, "co_ceo">];
   const guidance = getProposalGuidance(proposal.kind, facebookPageName);
+  const statusView = proposalStatusView(proposal.status, proposal.kind, facebookPageName);
   const risk = assessActionRisk(proposal.kind, {}, riskSettings?.[proposal.kind]);
   let displayContent = proposal.content;
   if (proposal.kind === "gmail_email") {
@@ -132,20 +122,13 @@ export function ProposalCard({
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-        <span className="text-slate-500">
+        <span className="text-slate-600">
           {showAgent && persona ? `${persona.name} · ` : ""}
           {KIND_LABELS[proposal.kind] ?? "Autre proposition"}
         </span>
-        <span
-          className={`rounded-full px-2 py-0.5 ${
-            ["en_attente", "envoi_en_cours", "envoi_incertain", "publication_en_cours", "publication_incertaine"].includes(proposal.status)
-              ? "bg-amber-100 text-amber-800"
-              : proposal.status === "rejetee"
-                ? "bg-slate-100 text-slate-500"
-                : "bg-emerald-100 text-emerald-800"
-          }`}
-        >
-          {STATUS_LABELS[proposal.status] ?? proposal.status}
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${STATUS_TONE_CLASSES[statusView.tone]}`}>
+          <span aria-hidden="true">{statusView.icon}</span>
+          <span>{statusView.label}</span>
         </span>
       </div>
       <h3 className="mt-1 font-medium">{proposal.title}</h3>
@@ -210,6 +193,14 @@ export function ProposalCard({
       )}
       {proposal.status === "rejetee" && proposal.rejectionReason && (
         <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600"><span className="font-medium">Raison du rejet : </span>{proposal.rejectionReason}</p>
+      )}
+      {proposal.status === "rejetee" && (
+        <div className="mt-3">
+          <button type="button" onClick={() => decide({ status: "a_relire" })} disabled={busy} className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-800 disabled:opacity-50">
+            Rouvrir pour relecture
+          </button>
+          <p className="mt-1 text-xs text-slate-600">Rien n&apos;a été publié ni envoyé : vous pouvez revenir sur ce rejet.</p>
+        </div>
       )}
       {proposal.status === "en_attente" && rejecting && (
         <form onSubmit={rejectProposal} className="mt-3 space-y-2">

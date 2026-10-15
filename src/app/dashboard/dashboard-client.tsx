@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AgentProposal, ChatMessage, ActionPlanItem } from "@prisma/client";
 import type { AgentRunView } from "@/lib/agent-run-types";
@@ -12,17 +13,11 @@ import { ProposalCard, type ProposalDecision } from "@/components/proposal-card"
 import { JourneyProgress } from "@/components/journey-progress";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 import { describeProgress, summarizeProposals } from "@/lib/proposal-progress";
+import { countByFilter, FILTER_LABELS, groupQueue, type QueueFilter } from "@/lib/validation-queue";
+import { needsAttention } from "@/lib/pending-decisions";
 
 type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
-
-function needsAttention(proposal: AgentProposal, facebookPageName: string | null) {
-  const approved = ["validee", "modifiee"].includes(proposal.status);
-  return proposal.status === "en_attente" ||
-    proposal.status === "publication_incertaine" ||
-    (proposal.kind === "site_web_content" && approved) ||
-    (proposal.kind === "social_post" && approved && facebookPageName !== null);
-}
 
 export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
   company: SafeCompany;
@@ -36,6 +31,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   facebookPageName: string | null;
 }) {
   const { requestProfile, profileDialog, checking } = useAgentProfileCompletion();
+  const router = useRouter();
   const [planItems, setPlanItems] = useState(initialPlanItems);
   const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
   const [proposals, setProposals] = useState(initialProposals);
@@ -51,6 +47,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const [discardingId, setDiscardingId] = useState<string | null>(null);
   const [discardReason, setDiscardReason] = useState("");
   const [decidedIds, setDecidedIds] = useState<string[]>([]);
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
 
   async function refresh() {
     const [planResponse, proposalResponse, runsResponse] = await Promise.all([
@@ -63,6 +60,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
     setPlanItems(nextPlan);
     setProposals(nextProposals);
     setAgentRuns(nextRuns.runs);
+    router.refresh();
     return nextProposals;
   }
 
@@ -168,12 +166,14 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       });
       if (status !== "brouillon") setDecidedIds((previous) => [...previous, proposalId]);
       await refresh();
-      setNotice(status === "brouillon"
+      setNotice(status === "a_relire"
+        ? "Production rouverte : elle est de nouveau à relire dans la file À valider."
+        : status === "brouillon"
         ? "Brouillon enregistré. Il n'est pas approuvé : rien ne sera publié ni envoyé."
         : status === "modifiee"
           ? "Cette version est approuvée. Aucune action n'a été exécutée automatiquement."
           : status === "validee"
-            ? "Production validée. La validation ne vaut pas publication ou envoi."
+            ? "Production approuvée. L'approbation ne vaut pas publication ou envoi."
             : "Production rejetée.");
       return true;
     } catch (error) {
@@ -234,6 +234,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const closedItems = planItems.filter((item) => item.status === "ecarte" || item.status === "termine");
   const actionable = proposals.filter((proposal) => needsAttention(proposal, facebookPageName));
   const validationItems = proposals.filter((proposal) => needsAttention(proposal, facebookPageName) || decidedIds.includes(proposal.id));
+  const queueCounts = countByFilter(validationItems);
+  const queueGroups = groupQueue(validationItems, queueFilter, new Map(planItems.map((item) => [item.id, item.title])));
   const history = proposals.filter((proposal) => !needsAttention(proposal, facebookPageName));
   const nextItem = activeItems.find((item) => item.status === "propose");
   const runningItem = activeItems.find((item) => item.status === "en_cours");
@@ -251,7 +253,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
         </div>
         <Link href="/rapport" className="text-sm font-medium text-indigo-600 underline underline-offset-4">Voir les résultats</Link>
       </header>
-      <JourneyProgress
+      {initialView !== "validation" && <JourneyProgress
         objectiveComplete={Boolean(company.objective?.trim())}
         diagnosticComplete={initialDiagnosticCount > 0}
         planComplete={planItems.length > 0}
@@ -260,8 +262,8 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
         resultsAvailable={proposals.some((proposal) => proposal.status === "executee")}
         planLoading={planLoading}
         onPreparePlan={handleGeneratePlan}
-      />
-      <section className="mt-6 border-y border-slate-200 py-5" aria-labelledby="next-step">
+      />}
+      {initialView !== "validation" && <section className="mt-6 border-y border-slate-200 py-5" aria-labelledby="next-step">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prochaine étape</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
           <h2 id="next-step" className="max-w-xl text-lg font-medium">{actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision` : nextItem ? nextItem.title : runningItem ? `En cours : ${runningItem.title}` : needsFirstDiagnostic ? "Repérer les premières opportunités" : "Préparer les prochaines actions"}</h2>
@@ -277,7 +279,12 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <button onClick={handleGeneratePlan} disabled={locked} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50">{planLoading ? "Paul réfléchit…" : "Préparer le plan"}</button>
           )}
         </div>
-      </section>
+      </section>}
+      {initialView === "validation" && (
+        <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-800">
+          {actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision. Valider ou rejeter ne publie ni n'envoie rien.` : "Aucune production n'attend votre décision."}
+        </p>
+      )}
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
       {agentRuns.some((run) => run.status === "queued" || run.status === "running" || run.status === "failed") && <section className="mt-4 border-b border-slate-200 pb-4" aria-label="Exécutions récentes">
@@ -324,7 +331,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
               return (
                 <li key={item.id} className="py-5">
                   <div className="flex flex-wrap items-start gap-3">
-                    <span className="pt-1 text-sm text-slate-400">{index + 1}.</span>
+                    <span className="pt-1 text-sm text-slate-600">{index + 1}.</span>
                     <PersonaAvatar agentKey={item.agent as AgentKey} size={32} />
                     <div className="min-w-0 flex-1 basis-40">
                       <p className="text-xs text-slate-500">{persona?.name ?? item.agent} · {item.timing}</p>
@@ -367,11 +374,29 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <p className="mt-2 max-w-prose text-sm text-slate-600">Aucune production à valider ou à publier. Les brouillons de l&apos;équipe apparaissent ici pour être relus, corrigés ou refusés avant toute action externe.</p>
             <Link href={emptyNextHref} className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">{emptyNextLabel}</Link>
           </div>}
-          {validationItems.map((proposal) => (
-            <div key={proposal.id}>
-              <p className="mb-2 text-xs text-slate-600">Action d&apos;origine : {planItems.find((item) => item.id === proposal.planItemId)?.title ?? "demande ponctuelle à l'équipe"}</p>
-              <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
+          {validationItems.length > 0 && (
+            <div role="group" aria-label="Filtrer les productions" className="flex flex-wrap gap-2">
+              {(Object.keys(FILTER_LABELS) as QueueFilter[]).map((filter) => (
+                <button key={filter} type="button" aria-pressed={queueFilter === filter} onClick={() => setQueueFilter(filter)}
+                  className={`min-h-11 rounded-lg border px-3 text-sm ${queueFilter === filter ? "border-indigo-700 bg-indigo-50 font-medium text-indigo-900" : "border-slate-300 text-slate-700"}`}>
+                  {FILTER_LABELS[filter]} ({queueCounts[filter]})
+                </button>
+              ))}
             </div>
+          )}
+          {validationItems.length > 0 && queueGroups.length === 0 && (
+            <div role="status" className="py-4">
+              <p className="text-sm text-slate-700">Aucune production ne correspond à ce filtre. {queueCounts.all} production(s) restent dans la file.</p>
+              <button type="button" onClick={() => setQueueFilter("all")} className="mt-2 min-h-11 text-sm font-medium text-indigo-700 underline">Afficher toutes les productions</button>
+            </div>
+          )}
+          {queueGroups.map((group) => (
+            <section key={group.key} aria-labelledby={`group-${group.key}`} className="space-y-3">
+              <h2 id={`group-${group.key}`} className="text-sm font-semibold text-slate-800">{group.title} <span className="font-normal text-slate-600">({group.items.length})</span></h2>
+              {group.items.map((proposal) => (
+                <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
+              ))}
+            </section>
           ))}
         </section>
       )}
@@ -382,7 +407,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             <p className="text-sm text-slate-600">Aucune production traitée. Vos validations et refus resteront ici pour retrouver vos décisions.</p>
             <Link href={actionable.length > 0 ? "/dashboard?view=validation" : emptyNextHref} className="mt-3 inline-block text-sm font-medium text-indigo-600 underline">{actionable.length > 0 ? "Examiner les productions" : emptyNextLabel}</Link>
           </div>}
-          {history.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} busy={locked} showAgent riskSettings={riskSettings} />)}
+          {history.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onDecision={handleDecision} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} />)}
           <h2 className="pt-4 font-medium">Actions terminées et écartées</h2>
           {closedItems.length === 0 && <p className="text-sm text-slate-500">Les actions terminées ou écartées du plan seront conservées ici.</p>}
           <ul className="divide-y divide-slate-200">

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionEmail } from "@/lib/session";
 import { AppShell } from "@/components/app-shell";
+import { getPendingDecisionCount } from "@/lib/pending-decisions-server";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { computeBusinessTarget, formatEuros } from "@/lib/business-target";
 import { getFunnelStats } from "@/lib/funnel";
@@ -22,9 +23,10 @@ export default async function RapportPage() {
     getFunnelStats(company.id),
   ]);
   const target = computeBusinessTarget(company);
+  const pendingCount = await getPendingDecisionCount(company.id);
 
   return (
-    <AppShell companyName={company.name}>
+    <AppShell companyName={company.name} pendingCount={pendingCount}>
       <div className="mx-auto max-w-4xl">
         <header className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-2xl font-semibold">Résultats</h1>
@@ -61,7 +63,7 @@ export default async function RapportPage() {
         <section className="border-t border-slate-200 py-6">
           <h2 className="font-medium">Productions · depuis le début</h2>
           <dl className="mt-4 grid grid-cols-2 gap-5">
-            <div><dt className="text-sm text-slate-500">Approuvées, non exécutées</dt><dd className="mt-1 text-2xl font-semibold">{approvedCount}</dd></div>
+            <div><dt className="text-sm text-slate-500">Approuvées, pas encore publiées ni envoyées</dt><dd className="mt-1 text-2xl font-semibold">{approvedCount}</dd></div>
             <div><dt className="text-sm text-slate-500">Exécutées par BienDecider</dt><dd className="mt-1 text-2xl font-semibold text-emerald-700">{executedCount}</dd></div>
           </dl>
           <Link href="/dashboard?view=historique" className="mt-4 inline-block text-sm text-indigo-600 underline">Consulter l&apos;historique des décisions</Link>

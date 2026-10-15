@@ -7,6 +7,7 @@ import { facebookConnectionView, isMetaOAuthConfigured, META_ERROR_MESSAGES } fr
 import { FacebookPanel } from "./facebook-panel";
 import { decryptGmailAccount, isGmailConfigured } from "@/lib/oauth/gmail";
 import { GmailPanel } from "./gmail-panel";
+import { getPendingDecisionCount } from "@/lib/pending-decisions-server";
 import { LinkedInPanel } from "./linkedin-panel";
 import { decryptLinkedInAccount, isLinkedInConfigured, LINKEDIN_ERROR_MESSAGES } from "@/lib/oauth/linkedin";
 import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
@@ -47,6 +48,7 @@ export default async function ConnexionsPage({
   if (!company || !company.name) redirect("/onboarding");
 
   const { connected, error } = await searchParams;
+  const pendingCount = await getPendingDecisionCount(company.id);
 
   const { connections: existing, checkedAt, gmailEmail } = await getConnectionSnapshot(company.id);
   const byChannel = new Map(existing.map((c) => [c.channel, c]));
@@ -74,7 +76,7 @@ export default async function ConnexionsPage({
   const facebookView = facebookConnectionView(byChannel.get("facebook"), company.id, checkedAt);
 
   return (
-    <AppShell companyName={company.name}>
+    <AppShell companyName={company.name} pendingCount={pendingCount}>
       <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold">Connexions</h1>
         <p className="mt-2 text-sm text-gray-600">
@@ -169,7 +171,7 @@ export default async function ConnexionsPage({
           })}
         </ul>
 
-        <p className="mt-6 text-xs text-gray-400">
+        <p className="mt-6 text-xs text-slate-600">
           Avant un envoi ou une publication, le canal, la destination et l&apos;étape à confirmer sont indiqués avec la proposition.
         </p>
       </div>

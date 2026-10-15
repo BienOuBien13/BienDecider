@@ -272,7 +272,7 @@ test("a draft is saved without approval, then a precise version is approved with
 
     // Le brouillon survit au rechargement sans valoir décision ni terminer l'action.
     await page.reload();
-    await expect(card.getByText("À valider", { exact: true })).toBeVisible();
+    await expect(card.getByText("À relire", { exact: true })).toBeVisible();
     let saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
     expect(saved).toMatchObject({ content: draftContent, version: 2, status: "en_attente", approvedVersion: null, decidedAt: null });
     expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("lance");
@@ -293,7 +293,7 @@ test("a draft is saved without approval, then a precise version is approved with
     await page.unroute(`**/api/proposals/${proposal.id}`);
 
     await card.getByRole("button", { name: "Approuver cette version", exact: true }).click();
-    await expect(card.getByText("Modifiée", { exact: true })).toBeVisible();
+    await expect(card.getByText("À publier manuellement", { exact: true })).toBeVisible();
     saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
     expect(saved).toMatchObject({ content: finalContent, version: 3, approvedVersion: 3, status: "modifiee" });
     expect(saved.approvedAt).not.toBeNull();
@@ -356,6 +356,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(page.locator("article")).toHaveCount(0);
     await page.getByRole("link", { name: "À valider 3", exact: true }).click();
     await expect(page.locator("article")).toHaveCount(3);
+    await expect(page.getByRole("link", { name: "Productions à valider 3", exact: true }).first()).toBeVisible();
     await expect(page.getByText("Risque élevé", { exact: true })).toHaveCount(3);
     await expect(page.getByText("Risque modéré", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Risque élevé", { exact: true }).first()).toBeVisible();
@@ -373,7 +374,13 @@ test("single validation queue, persistent decisions, publishing and error recove
     expect(await prisma.executionLog.count({ where: { proposalId: unapprovedSite.id } })).toBe(0);
     await prisma.agentProposal.delete({ where: { id: unapprovedSite.id } });
     const manual = page.locator("article").filter({ hasText: "Demande manuelle" });
-    await expect(page.getByText("Action d'origine : Préparer la communication")).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: "Préparer la communication (1)" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Demandes ponctuelles à l'équipe (2)" })).toBeVisible();
+    await page.getByRole("button", { name: "À vérifier (0)" }).click();
+    await expect(page.locator("article")).toHaveCount(0);
+    await expect(page.getByText("Aucune production ne correspond à ce filtre. 3 production(s) restent dans la file.")).toBeVisible();
+    await page.getByRole("button", { name: "Afficher toutes les productions" }).click();
+    await expect(page.locator("article")).toHaveCount(3);
     await expect(manual.getByText(/^Valider approuve ce contenu\./)).toBeVisible();
     await expect(manual.getByText("Contenu manuel")).toBeVisible();
     await page.route("**/api/proposals/*", async (route) => {
@@ -385,7 +392,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(manual.getByRole("button", { name: "Valider", exact: true })).toBeEnabled();
     await page.unroute("**/api/proposals/*");
     await manual.getByRole("button", { name: "Valider", exact: true }).click();
-    await expect(manual.getByText("Validée", { exact: true })).toBeVisible();
+    await expect(manual.getByText("À publier manuellement", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 2", exact: true })).toBeVisible();
     await expect(manual).toBeVisible();
     const planned = page.locator("article").filter({ hasText: "Publication issue du plan" });
@@ -393,6 +400,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await planned.getByRole("button", { name: "Confirmer le rejet", exact: true }).click();
     await expect(planned.getByText("Rejetée", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 1", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Productions à valider 1", exact: true }).first()).toBeVisible();
     const site = await prisma.agentProposal.findFirstOrThrow({ where: { companyId: company.id, kind: "site_web_content" } });
     await page.route(`**/api/proposals/${site.id}/execute`, async (route) => {
       expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true });
@@ -401,7 +409,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     });
     await page.getByRole("button", { name: "Publier le site" }).click();
     await page.getByRole("button", { name: "Confirmer la mise en ligne" }).click();
-    await expect(page.locator("article").filter({ hasText: site.title }).getByText("Réalisée", { exact: true })).toBeVisible();
+    await expect(page.locator("article").filter({ hasText: site.title }).getByText("Publiée", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 0", exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("validation-desktop.png"), fullPage: true });
     await page.reload();
@@ -455,6 +463,15 @@ test("rejection reasons are optional, persisted in history and available to agen
     await page.goto(`${baseURL}/dashboard?view=historique`);
     await page.reload();
     await expect(page.locator("article").filter({ hasText: proposal.title }).getByText("Raison du rejet : Hors de ma zone d'intervention", { exact: true })).toBeVisible();
+
+    // Un rejet se rouvre tant que rien n'a été exécuté : retour à relire, motif effacé, prospect de nouveau proposé.
+    expect((await patch({ status: "a_relire" })).status()).toBe(400);
+    await page.locator("article").filter({ hasText: proposal.title }).getByRole("button", { name: "Rouvrir pour relecture" }).click();
+    await expect(page.getByText("Production rouverte", { exact: false })).toBeVisible();
+    const reopened = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+    expect(reopened).toMatchObject({ status: "en_attente", rejectionReason: null, decidedAt: null });
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("propose");
+    expect((await patch({ status: "a_relire", expectedVersion: reopened.version })).status()).toBe(409);
 
     const optional = await prisma.agentProposal.create({ data: {
       companyId: company.id, agent: "contenu", kind: "social_post", title: "Refus sans motif", content: "Publication proposée",

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getSessionEmail } from "@/lib/session";
 import { AppShell } from "@/components/app-shell";
+import { getPendingDecisionCount } from "@/lib/pending-decisions-server";
 import { EquipeClient } from "./equipe-client";
 import type { AgentRunView } from "@/lib/agent-run-types";
 
@@ -19,9 +20,10 @@ export default async function EquipePage() {
     take: 12,
     select: { id: true, agent: true, planItemId: true, status: true, attempts: true, maxDurationSeconds: true, queuedAt: true, startedAt: true, finishedAt: true, resultCount: true, errorMessage: true },
   });
+  const pendingCount = await getPendingDecisionCount(company.id);
 
   return (
-    <AppShell companyName={company.name}>
+    <AppShell companyName={company.name} pendingCount={pendingCount}>
       <EquipeClient initialAgentRuns={initialAgentRuns} />
     </AppShell>
   );
