@@ -12,6 +12,7 @@ import { recordUsage, runToolLoop } from "@/lib/usage";
 import { getFunnelStats, funnelLines } from "@/lib/funnel";
 import { CAPABILITY_CATALOG, recordUncoveredRequest } from "@/lib/agents/capabilities";
 import { getChatInstructionsForPlan, getPlanAndFunnelStatus, loadRecentChatHistory } from "@/lib/agents/chat-context";
+import { resolvePaulReferences } from "@/lib/paul-references";
 
 const PERSONA = PERSONAS.co_ceo;
 
@@ -79,7 +80,7 @@ export async function runCoCeoTurn(companyId: string, userMessage: string, reser
       "Récupère l'état réel actuel : plan d'action en cours, suivi des prospects, propositions en attente (avec leur contenu) et derniers constats d'audit. À utiliser systématiquement avant de répondre à toute question sur l'état, le plan, les prospects, le contenu ou le nombre de propositions/constats — ne jamais deviner ni se fier à ce qui a été dit dans un tour précédent.",
     inputSchema: z.object({}),
     run: async () => {
-      const [pending, findings] = await Promise.all([
+      const [pending, findings, leads] = await Promise.all([
         prisma.agentProposal.findMany({
           where: { companyId, status: "en_attente" },
           orderBy: { createdAt: "desc" },
@@ -88,6 +89,12 @@ export async function runCoCeoTurn(companyId: string, userMessage: string, reser
           where: { companyId },
           orderBy: { createdAt: "desc" },
           take: 5,
+        }),
+        prisma.lead.findMany({
+          where: { companyId, stage: { notIn: ["propose", "ecarte"] } },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+          select: { id: true, name: true, stage: true },
         }),
       ]);
       return JSON.stringify({
@@ -101,9 +108,11 @@ export async function runCoCeoTurn(companyId: string, userMessage: string, reser
           content: p.content,
         })),
         derniersConstatsAudit: findings.map((f) => ({
+          id: f.id,
           title: f.title,
           content: f.content,
         })),
+        prospectsSuivis: leads,
       });
     },
   });
@@ -208,6 +217,7 @@ Règles strictes, non négociables :
 - Si on te demande de connecter un compte (Google, Instagram, Facebook) : explique que ça se fait via OAuth sur la page /connexions, et que tu ne dois JAMAIS demander ou recevoir un mot de passe dans cette conversation.
 - Pour déléguer à Contenu (sans actualité) ou Démarchage (sans cible), tu peux le faire sans information — les agents proposeront leurs propres idées génériques. Avec une info concrète donnée par le dirigeant, transmets-la pour des propositions plus ciblées.
 - Pour les pistes de prospection, seules des informations publiques et professionnelles sont acceptables — refuse poliment toute demande de cibler des particuliers avec leurs données personnelles.
+- Quand tu cites explicitement une production, un constat ou un prospect présent dans get_current_status ou dans le contexte de page, ajoute immédiatement après son nom le marqueur fourni [[bd:proposal:ID]], [[bd:finding:ID]] ou [[bd:lead:ID]]. Reprends uniquement un identifiant exact de ces données; ne crée jamais d'identifiant, de lien ou d'URL. N'ajoute pas de marqueur pour un objet absent de ces données.
 - Réponds de façon brève et directe, comme un vrai point rapide entre dirigeants, pas un rapport formel.`,
       },
     ],
@@ -221,6 +231,7 @@ Règles strictes, non négociables :
     .trim();
 
   const savedReply = assistantText || "(pas de réponse textuelle — vérifiez le dashboard pour les nouvelles propositions)";
+  const [resolvedReply] = await resolvePaulReferences(companyId, [savedReply]);
 
   await recordUsage({
     companyId: company.id,
@@ -231,10 +242,10 @@ Règles strictes, non négociables :
   });
 
   await prisma.chatMessage.create({
-    data: { companyId, role: "assistant", content: savedReply },
+    data: { companyId, role: "assistant", content: resolvedReply.content },
   });
 
-  return savedReply;
+  return resolvedReply;
 }
 
 /**

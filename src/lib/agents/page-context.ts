@@ -20,14 +20,14 @@ function clip(value: string | null | undefined): string | null {
 async function loadElement(companyId: string, type: PaulElementType, id: string): Promise<Record<string, unknown> | null> {
   if (type === "proposal") {
     const proposal = await prisma.agentProposal.findFirst({ where: { id, companyId } });
-    return proposal && { type: "production", kind: proposal.kind, titre: proposal.title, statut: proposal.status, version: proposal.version, contenu: clip(proposal.content), raisonDuRejet: clip(proposal.rejectionReason) };
+    return proposal && { id: proposal.id, type: "production", kind: proposal.kind, titre: proposal.title, statut: proposal.status, version: proposal.version, contenu: clip(proposal.content), raisonDuRejet: clip(proposal.rejectionReason) };
   }
   if (type === "finding") {
     const finding = await prisma.auditFinding.findFirst({ where: { id, companyId } });
-    return finding && { type: "constat", categorie: finding.category, titre: finding.title, resume: clip(finding.content), ceQuiEstBien: clip(finding.whatWorks), aAmeliorer: clip(finding.toImprove) };
+    return finding && { id: finding.id, type: "constat", categorie: finding.category, titre: finding.title, resume: clip(finding.content), ceQuiEstBien: clip(finding.whatWorks), aAmeliorer: clip(finding.toImprove) };
   }
   const lead = await prisma.lead.findFirst({ where: { id, companyId } });
-  return lead && { type: "prospect", organisation: lead.name, raison: clip(lead.reason), segment: lead.segment, etape: lead.stage, contactPublic: lead.publicContact, source: lead.source };
+  return lead && { id: lead.id, type: "prospect", organisation: lead.name, raison: clip(lead.reason), segment: lead.segment, etape: lead.stage, contactPublic: lead.publicContact, source: lead.source };
 }
 
 /**

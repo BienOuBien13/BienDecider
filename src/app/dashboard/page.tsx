@@ -6,14 +6,14 @@ import { omitPasswordHash } from "@/lib/safe-company";
 import { DashboardClient } from "./dashboard-client";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 import { facebookConnectionView } from "@/lib/oauth/meta";
-import { countPendingDecisions } from "@/lib/pending-decisions";
+import { countPendingDecisions, needsAttention } from "@/lib/pending-decisions";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage({ searchParams }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams: Promise<{ view?: string; proposal?: string }>;
 }) {
-  const { view } = await searchParams;
+  const { view, proposal: focusProposalId } = await searchParams;
   const ownerEmail = await getSessionEmail();
   if (!ownerEmail) redirect("/login");
 
@@ -46,6 +46,10 @@ export default async function DashboardPage({ searchParams }: {
   // Seul le nom de la Page connectée est transmis au navigateur, jamais un jeton.
   const facebook = facebookConnectionView(facebookConnection ?? undefined, company.id);
   const facebookPageName = facebook.status === "connected" ? facebook.pageName : null;
+  const focusedProposal = focusProposalId ? proposals.find((proposal) => proposal.id === focusProposalId) : undefined;
+  const initialView = focusedProposal
+    ? needsAttention(focusedProposal, facebookPageName) ? "validation" : "historique"
+    : view === "validation" || view === "historique" ? view : "plan";
 
   return (
     <AppShell companyName={company.name} pendingCount={countPendingDecisions(proposals, facebookPageName)}>
@@ -57,7 +61,7 @@ export default async function DashboardPage({ searchParams }: {
         initialDiagnosticCount={diagnosticCount}
         riskSettings={riskSettings}
         facebookPageName={facebookPageName}
-        initialView={view === "validation" || view === "historique" ? view : "plan"}
+        initialView={initialView}
       />
     </AppShell>
   );

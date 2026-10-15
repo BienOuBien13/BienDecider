@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const pageContext = parsed.data.context ? await buildPageContext(company.id, parsed.data.context) : undefined;
     const reservation = await reserveUsageBudget(company.id, "co_ceo_chat");
     const reply = await runCoCeoTurn(company.id, parsed.data.message, reservation.id, pageContext);
-    return NextResponse.json({ reply });
+    return NextResponse.json({ reply: reply.content, references: reply.references });
   } catch (error) {
     if (error instanceof AgentRunQuotaError) return NextResponse.json({ error: error.message }, { status: 429 });
     console.error("Erreur Co-CEO:", error);

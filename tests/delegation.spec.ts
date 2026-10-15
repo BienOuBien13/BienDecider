@@ -6,6 +6,7 @@ import { getApprovalConsequence } from "../src/lib/channel-capabilities";
 import { proposalStatusView } from "../src/lib/proposal-status";
 import { countByFilter, groupQueue, UNATTACHED_GROUP_TITLE } from "../src/lib/validation-queue";
 import { countPendingDecisions, needsAttention } from "../src/lib/pending-decisions";
+import { parsePaulReferenceMarkers } from "../src/lib/paul-references";
 import { describePage } from "../src/lib/paul-context";
 import { buildOutreachDraft, dayToDate, formatDay, hasPlaceholders, leadReadiness, pickNextLead } from "../src/lib/lead-followup";
 import { describeRunProgress, finishedRunMessage, formatDuration, recentSucceededRuns, runResultHref } from "../src/lib/agent-run-progress";
@@ -136,6 +137,15 @@ test("pending decisions count what waits for the owner, and a manual-only approv
   expect(needsAttention(p("executee", "site_web_content"), "Page")).toBe(false);
   expect(countPendingDecisions([p("en_attente"), p("validee"), p("validee", "site_web_content"), p("rejetee")], null)).toBe(2);
   expect(countPendingDecisions([], "Page")).toBe(0);
+});
+
+test("Paul reference markers accept only typed internal object identifiers", () => {
+  expect(parsePaulReferenceMarkers("Voir [[bd:proposal:prop_123]] et [[bd:finding:abc-7]]; [[bd:lead:lead.1]]"))
+    .toEqual([
+      { marker: "[[bd:proposal:prop_123]]", type: "proposal", id: "prop_123" },
+      { marker: "[[bd:finding:abc-7]]", type: "finding", id: "abc-7" },
+    ]);
+  expect(parsePaulReferenceMarkers("[[bd:proposal:https://example.com]] [[bd:lead:../other]]")).toEqual([]);
 });
 
 test("Paul is told the page by name, never by the raw address the browser sent", () => {
