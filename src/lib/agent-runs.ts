@@ -225,30 +225,33 @@ export async function getAgentRun(companyId: string, runId: string) {
   const staleAfter = run.maxDurationSeconds + STALE_GRACE_SECONDS;
   const referenceTime = run.startedAt ?? run.queuedAt;
   if (["queued", "running"].includes(run.status) && Date.now() - referenceTime.getTime() > staleAfter * 1000) {
-    const failed = await prisma.agentRun.updateMany({
-      where: { id: run.id, companyId, status: run.status },
-      data: {
-        status: "failed",
-        activeDedupeKey: null,
-        reservedCostUsd: 0,
-        finishedAt: new Date(),
-        errorMessage: run.status === "queued"
-          ? "L'agent n'a pas pu démarrer. Vous pouvez relancer l'action."
-          : "Le délai maximal est dépassé. Vous pouvez relancer l'action.",
-      },
-    });
-    if (failed.count === 1) {
-      await prisma.agentRunAttempt.updateMany({
-        where: { agentRunId: run.id, status: { in: ["queued", "running"] } },
+    const stale = run;
+    // Un seul commit : l'exécution ne doit jamais être lue échouée alors que son action reste « en cours ».
+    await prisma.$transaction(async (tx) => {
+      const failed = await tx.agentRun.updateMany({
+        where: { id: stale.id, companyId, status: stale.status },
+        data: {
+          status: "failed",
+          activeDedupeKey: null,
+          reservedCostUsd: 0,
+          finishedAt: new Date(),
+          errorMessage: stale.status === "queued"
+            ? "L'agent n'a pas pu démarrer. Vous pouvez relancer l'action."
+            : "Le délai maximal est dépassé. Vous pouvez relancer l'action.",
+        },
+      });
+      if (failed.count !== 1) return;
+      await tx.agentRunAttempt.updateMany({
+        where: { agentRunId: stale.id, status: { in: ["queued", "running"] } },
         data: { status: "failed", finishedAt: new Date(), errorMessage: "Délai maximal dépassé avant la reprise." },
       });
-    }
-    if (failed.count === 1 && run.planItemId) {
-      await prisma.actionPlanItem.updateMany({
-        where: { id: run.planItemId, companyId, status: "en_cours" },
-        data: { status: "propose" },
-      });
-    }
+      if (stale.planItemId) {
+        await tx.actionPlanItem.updateMany({
+          where: { id: stale.planItemId, companyId, status: "en_cours" },
+          data: { status: "propose" },
+        });
+      }
+    });
     run = await prisma.agentRun.findFirst({ where: { id: runId, companyId } });
   }
 
@@ -322,17 +325,20 @@ export async function processAgentRun(runId: string) {
     const message = error instanceof AgentRunConflictError
       ? error.message
       : agentFailureMessage(error, PERSONAS[run.agent as PlanAgent]?.name ?? "L'agent");
-    const failed = await prisma.agentRun.updateMany({
-      where: { id: run.id, status: "running", attempts: run.attempts },
-      data: { status: "failed", activeDedupeKey: null, reservedCostUsd: 0, errorMessage: message, finishedAt: new Date() },
-    });
-    await prisma.agentRunAttempt.updateMany({ where: { id: attemptId, status: "running" }, data: { status: "failed", finishedAt: new Date(), errorMessage: message } });
-    if (failed.count === 1 && run.planItemId) {
-      await prisma.actionPlanItem.updateMany({
-        where: { id: run.planItemId, companyId: run.companyId, status: "en_cours" },
-        data: { status: "propose" },
+    // Un seul commit : l'exécution ne doit jamais être lue échouée alors que son action reste « en cours ».
+    await prisma.$transaction(async (tx) => {
+      const failed = await tx.agentRun.updateMany({
+        where: { id: run.id, status: "running", attempts: run.attempts },
+        data: { status: "failed", activeDedupeKey: null, reservedCostUsd: 0, errorMessage: message, finishedAt: new Date() },
       });
-    }
+      await tx.agentRunAttempt.updateMany({ where: { id: attemptId, status: "running" }, data: { status: "failed", finishedAt: new Date(), errorMessage: message } });
+      if (failed.count === 1 && run.planItemId) {
+        await tx.actionPlanItem.updateMany({
+          where: { id: run.planItemId, companyId: run.companyId, status: "en_cours" },
+          data: { status: "propose" },
+        });
+      }
+    });
   }
 }
 
