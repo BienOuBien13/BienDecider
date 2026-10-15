@@ -1,6 +1,7 @@
-import { expect, test } from "@playwright/test";
+﻿import { expect, test } from "@playwright/test";
 import { assessActionRisk, canExecuteAction, effectiveRiskLevel, requiresHumanApproval } from "../src/lib/delegation-risk";
 import { isAdminEmail, isExplicitAdminEmail } from "../src/lib/admin";
+import { describeProgress, isActionDone, summarizeProposals } from "../src/lib/proposal-progress";
 
 test("risk rules use registered kinds and contextual factors, then fail closed", () => {
   expect(assessActionRisk("piste_croissance").level).toBe("modere");
@@ -51,4 +52,18 @@ test("global risk settings require an explicit admin allowlist even in prototype
     if (previous === undefined) delete process.env.ADMIN_EMAILS;
     else process.env.ADMIN_EMAILS = previous;
   }
+});
+test("an action is done only when everything is decided and published, never when all was rejected", () => {
+  const p = (status: string, kind = "social_post") => ({ status, kind });
+  expect(isActionDone([])).toBe(false);
+  expect(isActionDone([p("rejetee"), p("rejetee")])).toBe(false);
+  expect(isActionDone([p("en_attente"), p("executee")])).toBe(false);
+  expect(isActionDone([p("validee", "site_web_content")])).toBe(false);
+  expect(isActionDone([p("publication_incertaine"), p("executee")])).toBe(false);
+  expect(isActionDone([p("publication_en_cours")])).toBe(false);
+  expect(isActionDone([p("executee", "site_web_content"), p("rejetee")])).toBe(true);
+  expect(isActionDone([p("modifiee")])).toBe(true);
+  const progress = summarizeProposals([p("en_attente"), p("validee", "site_web_content"), p("validee"), p("executee"), p("rejetee"), p("envoi_incertain")]);
+  expect(progress).toMatchObject({ total: 6, toReview: 1, toPublish: 1, manual: 1, executed: 1, rejected: 1, uncertain: 1 });
+  expect(describeProgress(progress)).toHaveLength(6);
 });

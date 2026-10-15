@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionCompany } from "@/lib/session";
+import { syncPlanItemStatus } from "@/lib/plan-item-status";
 
 // "brouillon" enregistre une version sans décision ; "validee"/"modifiee"
 // approuvent la version courante (avec ou sans nouveau contenu) ; "rejetee" refuse.
@@ -106,25 +107,8 @@ export async function PATCH(
     });
   }
 
-  // Lisibilité plan → propositions : quand toutes les propositions d'une
-  // action du plan sont décidées, l'action passe "terminée" d'elle-même ;
-  // une version de nouveau à relire la rouvre.
-  if (proposal.planItemId) {
-    const remaining = await prisma.agentProposal.count({
-      where: { planItemId: proposal.planItemId, status: "en_attente" },
-    });
-    if (remaining === 0) {
-      await prisma.actionPlanItem.update({
-        where: { id: proposal.planItemId },
-        data: { status: "termine" },
-      });
-    } else if (status === "brouillon") {
-      await prisma.actionPlanItem.updateMany({
-        where: { id: proposal.planItemId, status: "termine" },
-        data: { status: "lance" },
-      });
-    }
-  }
+  // Une action n'est terminée que si tout est décidé et réalisé ; un rejet total ou une mise en ligne en attente la laisse ouverte.
+  if (proposal.planItemId) await syncPlanItemStatus(proposal.planItemId);
 
   return NextResponse.json(proposal);
 }
