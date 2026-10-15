@@ -403,7 +403,7 @@ test("the dashboard names the Page and asks for an explicit confirmation before 
     await card.getByRole("button", { name: "Publier sur Facebook" }).click();
     await card.getByRole("button", { name: "Confirmer la publication" }).click();
     await expect(page.getByText("Publication mise en ligne sur la Page Facebook « Atelier Test · Page principale ».")).toBeVisible();
-    await expect(card.getByText("Réalisée", { exact: true })).toBeVisible();
+    await expect(card.getByText("Publiée", { exact: true })).toBeVisible();
     expect(executed).toBe(1);
     expect(await page.content()).not.toContain("private-");
   } finally {

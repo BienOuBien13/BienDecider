@@ -272,7 +272,7 @@ test("a draft is saved without approval, then a precise version is approved with
 
     // Le brouillon survit au rechargement sans valoir décision ni terminer l'action.
     await page.reload();
-    await expect(card.getByText("À valider", { exact: true })).toBeVisible();
+    await expect(card.getByText("À relire", { exact: true })).toBeVisible();
     let saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
     expect(saved).toMatchObject({ content: draftContent, version: 2, status: "en_attente", approvedVersion: null, decidedAt: null });
     expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("lance");
@@ -293,7 +293,7 @@ test("a draft is saved without approval, then a precise version is approved with
     await page.unroute(`**/api/proposals/${proposal.id}`);
 
     await card.getByRole("button", { name: "Approuver cette version", exact: true }).click();
-    await expect(card.getByText("Modifiée", { exact: true })).toBeVisible();
+    await expect(card.getByText("À publier manuellement", { exact: true })).toBeVisible();
     saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
     expect(saved).toMatchObject({ content: finalContent, version: 3, approvedVersion: 3, status: "modifiee" });
     expect(saved.approvedAt).not.toBeNull();
@@ -385,7 +385,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(manual.getByRole("button", { name: "Valider", exact: true })).toBeEnabled();
     await page.unroute("**/api/proposals/*");
     await manual.getByRole("button", { name: "Valider", exact: true }).click();
-    await expect(manual.getByText("Validée", { exact: true })).toBeVisible();
+    await expect(manual.getByText("À publier manuellement", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 2", exact: true })).toBeVisible();
     await expect(manual).toBeVisible();
     const planned = page.locator("article").filter({ hasText: "Publication issue du plan" });
@@ -401,7 +401,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     });
     await page.getByRole("button", { name: "Publier le site" }).click();
     await page.getByRole("button", { name: "Confirmer la mise en ligne" }).click();
-    await expect(page.locator("article").filter({ hasText: site.title }).getByText("Réalisée", { exact: true })).toBeVisible();
+    await expect(page.locator("article").filter({ hasText: site.title }).getByText("Publiée", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "À valider 0", exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("validation-desktop.png"), fullPage: true });
     await page.reload();

@@ -3,6 +3,7 @@ import { assessActionRisk, canExecuteAction, effectiveRiskLevel, requiresHumanAp
 import { isAdminEmail, isExplicitAdminEmail } from "../src/lib/admin";
 import { describeProgress, isActionDone, summarizeProposals } from "../src/lib/proposal-progress";
 import { getApprovalConsequence } from "../src/lib/channel-capabilities";
+import { proposalStatusView } from "../src/lib/proposal-status";
 
 test("risk rules use registered kinds and contextual factors, then fail closed", () => {
   expect(assessActionRisk("piste_croissance").level).toBe("modere");
@@ -78,4 +79,21 @@ test("approval consequence is stated per kind and never promises a publication",
     expect(getApprovalConsequence(kind, null), kind).toMatch(/^Valider /);
     expect(getApprovalConsequence(kind, null), kind).not.toMatch(/sera publi|est publi[ée] automatiquement/);
   }
+});
+
+test("production states use one glossary, an icon next to the colour, and manual publication only when BienDecider does not publish", () => {
+  expect(proposalStatusView("en_attente", "social_post").label).toBe("À relire");
+  expect(proposalStatusView("validee", "social_post", null).label).toBe("À publier manuellement");
+  expect(proposalStatusView("validee", "social_post", "Page").label).toBe("Approuvée");
+  expect(proposalStatusView("modifiee", "gbp_update", "Page").label).toBe("À publier manuellement");
+  expect(proposalStatusView("validee", "site_web_content").label).toBe("Approuvée");
+  expect(proposalStatusView("executee", "site_web_content").label).toBe("Publiée");
+  expect(proposalStatusView("executee", "gmail_email").label).toBe("Envoyée");
+  const statuses = ["en_attente", "validee", "modifiee", "rejetee", "executee", "envoi_en_cours", "envoi_incertain", "publication_en_cours", "publication_incertaine"];
+  for (const status of statuses) {
+    const view = proposalStatusView(status, "social_post");
+    expect(view.icon, status).not.toBe("");
+    expect(view.label, status).not.toMatch(/Validée|Réalisée|Modifiée|exécut/);
+  }
+  expect(proposalStatusView("publication_incertaine", "social_post").tone).toBe("alerte");
 });
