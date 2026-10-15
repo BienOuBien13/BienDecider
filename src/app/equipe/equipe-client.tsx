@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { AgentRunView } from "@/lib/agent-run-types";
-import { waitForAgentRun } from "@/lib/agent-runs-client";
+import { fetchAgentRun } from "@/lib/agent-runs-client";
+import { AgentRunTracker, useAgentRunMonitor } from "@/components/agent-run-tracker";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
 import { PersonaAvatar } from "@/components/persona-avatar";
@@ -18,26 +19,26 @@ export function EquipeClient({ initialAgentRuns }: { initialAgentRuns: AgentRunV
   const [prospectDescription, setProspectDescription] = useState("");
   const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
 
-  async function monitorRun(runId: string) {
-    try {
-      const finished = await waitForAgentRun(runId, (run) => {
-        setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 12));
-      });
-      if (finished?.status === "failed") setError(finished.errorMessage ?? "L'agent a échoué. Vous pouvez relancer la demande.");
-      if (finished?.status === "succeeded") setDone(true);
-    } catch (pollError) {
-      setError(pollError instanceof Error ? pollError.message : "Impossible de suivre l'exécution.");
-    }
+  function trackRun(run: AgentRunView) {
+    setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 12));
   }
+
+  function announceFinished(run: AgentRunView) {
+    if (run.status === "failed") setError(run.errorMessage ?? "L'agent a échoué. Vous pouvez relancer la demande.");
+    if (run.status === "succeeded") setDone(true);
+  }
+
+  const monitorRun = useAgentRunMonitor(initialAgentRuns, {
+    onUpdate: trackRun,
+    onFinished: announceFinished,
+    onError: (pollError) => setError(pollError instanceof Error ? pollError.message : "Impossible de suivre l'exécution."),
+  });
 
   async function checkRun(runId: string) {
     try {
-      const response = await fetch(`/api/agent-runs/${encodeURIComponent(runId)}`);
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.run) throw new Error(data?.error ?? "Impossible de vérifier l'exécution.");
-      setAgentRuns((previous) => [data.run, ...previous.filter((entry) => entry.id !== data.run.id)].slice(0, 12));
-      if (data.run.status === "failed") setError(data.run.errorMessage ?? "L'agent a échoué. Vous pouvez relancer la demande.");
-      if (data.run.status === "succeeded") setDone(true);
+      const checked = await fetchAgentRun(runId);
+      trackRun(checked);
+      announceFinished(checked);
     } catch (checkError) {
       setError(checkError instanceof Error ? checkError.message : "Impossible de vérifier l'exécution.");
     }
@@ -76,17 +77,7 @@ export function EquipeClient({ initialAgentRuns }: { initialAgentRuns: AgentRunV
       </header>
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {done && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Demande traitée. <Link href="/dashboard?view=validation" className="font-medium underline">Examiner les productions</Link></p>}
-      {agentRuns.some((run) => run.status === "queued" || run.status === "running" || run.status === "failed") && <section className="mt-5 border-y border-slate-200 py-3" aria-label="Exécutions récentes">
-        <h2 className="text-sm font-medium">Exécutions récentes</h2>
-        <ul className="mt-2 space-y-2 text-sm">
-          {agentRuns.filter((run) => run.status === "queued" || run.status === "running" || run.status === "failed").slice(0, 5).map((run) => (
-            <li key={run.id} className="flex flex-wrap items-center justify-between gap-2">
-              <span>{PERSONAS[run.agent as AgentKey]?.name ?? run.agent}: {run.status === "queued" ? "Dans la file" : run.status === "running" ? "En cours" : run.errorMessage ?? "Échec, relançable"}</span>
-              {(run.status === "queued" || run.status === "running") && <button onClick={() => void checkRun(run.id)} className="text-indigo-600 underline">Vérifier</button>}
-            </li>
-          ))}
-        </ul>
-      </section>}
+      <AgentRunTracker runs={agentRuns} onCheck={(runId) => void checkRun(runId)} />
       {profileDialog}
       <div className="mt-6 divide-y divide-slate-200 border-t border-slate-200">
         {(["co_ceo", "marketing", "contenu", "demarchage"] as AgentKey[]).map((key) => {
