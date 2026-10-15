@@ -43,7 +43,7 @@ function uncoveredRequestTool(companyId: string, source: "chat" | "plan") {
  * Garde-fou inchangé : déléguer ne fait que créer des propositions (ou des
  * constats), jamais d'exécution réelle.
  */
-export async function runCoCeoTurn(companyId: string, userMessage: string, reservationId?: string) {
+export async function runCoCeoTurn(companyId: string, userMessage: string, reservationId?: string, pageContext?: string) {
   const company = await prisma.company.findUniqueOrThrow({
     where: { id: companyId },
   });
@@ -61,11 +61,15 @@ export async function runCoCeoTurn(companyId: string, userMessage: string, reser
   // pour une entreprise donnée (aucune donnée recalculée par appel, Paul
   // passe par get_current_status plutôt que par un état injecté), donc mis
   // en cache en un seul bloc.
+  // Le contexte de page change à chaque tour : il précède le dernier message sans entrer dans le bloc mis en cache.
   const messages: Anthropic.MessageParam[] = history.map((m, i) => ({
     role: m.role === "user" ? "user" : "assistant",
     content:
       i === history.length - 1
-        ? [{ type: "text" as const, text: m.content, cache_control: { type: "ephemeral" as const } }]
+        ? [
+            ...(pageContext ? [{ type: "text" as const, text: pageContext }] : []),
+            { type: "text" as const, text: m.content, cache_control: { type: "ephemeral" as const } },
+          ]
         : m.content,
   }));
 

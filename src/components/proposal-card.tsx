@@ -2,6 +2,7 @@
 
 import type { AgentProposal } from "@prisma/client";
 import { useState } from "react";
+import { AskPaulButton } from "@/components/ask-paul-button";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { assessActionRisk } from "@/lib/delegation-risk";
 import { getApprovalConsequence, getProposalGuidance } from "@/lib/channel-capabilities";
@@ -191,6 +192,7 @@ export function ProposalCard({
           <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{displayContent}</p>
         </details>
       )}
+      <AskPaulButton element={{ type: "proposal", id: proposal.id, title: proposal.title }} />
       {proposal.status === "rejetee" && proposal.rejectionReason && (
         <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-600"><span className="font-medium">Raison du rejet : </span>{proposal.rejectionReason}</p>
       )}
