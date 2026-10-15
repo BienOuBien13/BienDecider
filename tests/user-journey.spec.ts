@@ -373,6 +373,9 @@ test("single validation queue, persistent decisions, publishing and error recove
     expect(await prisma.executionLog.count({ where: { proposalId: unapprovedSite.id } })).toBe(0);
     await prisma.agentProposal.delete({ where: { id: unapprovedSite.id } });
     const manual = page.locator("article").filter({ hasText: "Demande manuelle" });
+    await expect(page.getByText("Action d'origine : Préparer la communication")).toHaveCount(1);
+    await expect(manual.getByText(/^Valider approuve ce contenu\./)).toBeVisible();
+    await expect(manual.getByText("Contenu manuel")).toBeVisible();
     await page.route("**/api/proposals/*", async (route) => {
       if (route.request().method() === "PATCH") await route.fulfill({ status: 500, json: { error: "Décision non enregistrée" } });
       else await route.continue();

@@ -72,7 +72,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error ?? "L'opération a échoué. Réessayez.");
+    if (!response.ok) throw Object.assign(new Error(data?.error ?? "L'opération a échoué. Réessayez."), { status: response.status });
     return data;
   }
 
@@ -176,7 +176,12 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
             ? "Production validée. La validation ne vaut pas publication ou envoi."
             : "Production rejetée.");
       return true;
-    } catch (error) { reportError(error); return false; }
+    } catch (error) {
+      reportError(error);
+      // Version périmée : on réaffiche la dernière version pour que le dirigeant voie ce qui a changé avant de décider.
+      if ((error as { status?: number }).status === 409) await refresh().catch(() => undefined);
+      return false;
+    }
     finally { setBusyId(null); }
   }
 
@@ -364,7 +369,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
           </div>}
           {validationItems.map((proposal) => (
             <div key={proposal.id}>
-              <p className="mb-2 text-xs text-slate-500">{planItems.find((item) => item.id === proposal.planItemId)?.title ?? "Demande ponctuelle à l'équipe"}</p>
+              <p className="mb-2 text-xs text-slate-600">Action d&apos;origine : {planItems.find((item) => item.id === proposal.planItemId)?.title ?? "demande ponctuelle à l'équipe"}</p>
               <ProposalCard proposal={proposal} onDecision={handleDecision} onExecute={handleExecute} busy={locked} showAgent riskSettings={riskSettings} facebookPageName={facebookPageName} siteDestination={company.siteSlug ? `/site/${company.siteSlug}` : null} />
             </div>
           ))}

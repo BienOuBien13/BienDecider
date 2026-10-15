@@ -42,6 +42,24 @@ export type ProposalGuidance = {
   canCopy: boolean;
 };
 
+/** Ce que « Valider » déclenche réellement, pour le dire avant le clic. */
+export function getApprovalConsequence(kind: string, facebookPageName: string | null) {
+  switch (kind) {
+    case "prospect":
+      return "Valider ajoute ce prospect à votre suivi de prospection. Aucun message n'est envoyé.";
+    case "piste_croissance":
+      return "Valider retient cette piste. Aucune action externe n'est lancée.";
+    case "site_web_content":
+      return "Valider approuve ce brief. Le site n'est pas mis en ligne : vous confirmerez la publication séparément.";
+    case "social_post":
+      return facebookPageName
+        ? "Valider approuve ce contenu. Il n'est pas encore publié : vous confirmerez la publication sur Facebook séparément."
+        : "Valider approuve ce contenu. Il n'est pas publié : copiez-le et publiez-le vous-même.";
+    default:
+      return "Valider approuve ce contenu. Il n'est ni publié ni envoyé : vous l'utilisez vous-même.";
+  }
+}
+
 export function getProposalGuidance(kind: string, facebookPageName: string | null): ProposalGuidance {
   switch (kind) {
     case "site_web_content":

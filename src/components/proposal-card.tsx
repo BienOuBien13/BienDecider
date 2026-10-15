@@ -4,7 +4,7 @@ import type { AgentProposal } from "@prisma/client";
 import { useState } from "react";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { assessActionRisk } from "@/lib/delegation-risk";
-import { getProposalGuidance } from "@/lib/channel-capabilities";
+import { getApprovalConsequence, getProposalGuidance } from "@/lib/channel-capabilities";
 
 export const STATUS_LABELS: Record<string, string> = {
   en_attente: "À valider",
@@ -203,7 +203,7 @@ export function ProposalCard({
           </div>
         </form>
       ) : (
-        <details className="mt-1">
+        <details className="mt-1" open={proposal.status === "en_attente"}>
           <summary className="cursor-pointer text-xs text-indigo-600">Voir le contenu</summary>
           <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{displayContent}</p>
         </details>
@@ -220,6 +220,9 @@ export function ProposalCard({
             <button type="button" onClick={() => { setRejecting(false); setRejectionReason(""); }} disabled={busy} className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700 disabled:opacity-50">Annuler le rejet</button>
           </div>
         </form>
+      )}
+      {proposal.status === "en_attente" && !editing && !rejecting && (
+        <p className="mt-3 text-xs text-slate-700">{getApprovalConsequence(proposal.kind, facebookPageName)}</p>
       )}
       {canEdit && !rejecting && (
         <div className="mt-3 flex flex-wrap gap-2">

@@ -2,6 +2,7 @@
 import { assessActionRisk, canExecuteAction, effectiveRiskLevel, requiresHumanApproval } from "../src/lib/delegation-risk";
 import { isAdminEmail, isExplicitAdminEmail } from "../src/lib/admin";
 import { describeProgress, isActionDone, summarizeProposals } from "../src/lib/proposal-progress";
+import { getApprovalConsequence } from "../src/lib/channel-capabilities";
 
 test("risk rules use registered kinds and contextual factors, then fail closed", () => {
   expect(assessActionRisk("piste_croissance").level).toBe("modere");
@@ -66,4 +67,15 @@ test("an action is done only when everything is decided and published, never whe
   const progress = summarizeProposals([p("en_attente"), p("validee", "site_web_content"), p("validee"), p("executee"), p("rejetee"), p("envoi_incertain")]);
   expect(progress).toMatchObject({ total: 6, toReview: 1, toPublish: 1, manual: 1, executed: 1, rejected: 1, uncertain: 1 });
   expect(describeProgress(progress)).toHaveLength(6);
+});
+
+test("approval consequence is stated per kind and never promises a publication", () => {
+  expect(getApprovalConsequence("prospect", null)).toContain("suivi de prospection");
+  expect(getApprovalConsequence("site_web_content", null)).toContain("pas mis en ligne");
+  expect(getApprovalConsequence("social_post", "Page")).toContain("confirmerez la publication sur Facebook");
+  expect(getApprovalConsequence("social_post", null)).toContain("publiez-le vous-même");
+  for (const kind of ["prospect", "piste_croissance", "site_web_content", "social_post", "gbp_update", "unknown"]) {
+    expect(getApprovalConsequence(kind, null), kind).toMatch(/^Valider /);
+    expect(getApprovalConsequence(kind, null), kind).not.toMatch(/sera publi|est publi[ée] automatiquement/);
+  }
 });
