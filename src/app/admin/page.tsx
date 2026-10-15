@@ -7,6 +7,7 @@ import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { DeleteCompanyButton } from "./delete-company-button";
 import Link from "next/link";
 import { listUncoveredRequests } from "@/lib/agents/capabilities";
+import { CompanyQuotaForm } from "./company-quota-form";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,10 @@ export default async function AdminPage() {
     );
   }
 
-  const [companies, usageByCompany, usageByAgent, usageByModel, totals, companiesWithPlan, companiesWithValidated, companiesWithSite] =
+  const now = new Date();
+  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const [companies, usageByCompany, usageByCompanyToday, usageByCompanyMonth, attemptsByCompanyToday, attemptsByCompanyMonth, inlineCallsByCompanyToday, inlineCallsByCompanyMonth, reservedByCompany, reservedInlineByCompany, usageByAgent, usageByModel, totals, companiesWithPlan, companiesWithValidated, companiesWithSite] =
     await Promise.all([
       prisma.company.findMany({
         orderBy: { createdAt: "desc" },
@@ -44,6 +48,14 @@ export default async function AdminPage() {
         by: ["companyId"],
         _sum: { costUsd: true, inputTokens: true, outputTokens: true },
       }),
+      prisma.usageEvent.groupBy({ by: ["companyId"], where: { createdAt: { gte: dayStart } }, _sum: { costUsd: true } }),
+      prisma.usageEvent.groupBy({ by: ["companyId"], where: { createdAt: { gte: monthStart } }, _sum: { costUsd: true } }),
+      prisma.agentRunAttempt.groupBy({ by: ["companyId"], where: { queuedAt: { gte: dayStart } }, _count: { _all: true } }),
+      prisma.agentRunAttempt.groupBy({ by: ["companyId"], where: { queuedAt: { gte: monthStart } }, _count: { _all: true } }),
+      prisma.usageReservation.groupBy({ by: ["companyId"], where: { createdAt: { gte: dayStart } }, _count: { _all: true } }),
+      prisma.usageReservation.groupBy({ by: ["companyId"], where: { createdAt: { gte: monthStart } }, _count: { _all: true } }),
+      prisma.agentRun.groupBy({ by: ["companyId"], where: { status: { in: ["queued", "running"] } }, _sum: { reservedCostUsd: true } }),
+      prisma.usageReservation.groupBy({ by: ["companyId"], where: { expiresAt: { gt: now }, releasedAt: null }, _sum: { amountUsd: true } }),
       prisma.usageEvent.groupBy({
         by: ["agent"],
         _sum: { costUsd: true, inputTokens: true, outputTokens: true },
@@ -66,6 +78,14 @@ export default async function AdminPage() {
     ]);
 
   const usageMap = new Map(usageByCompany.map((u) => [u.companyId, u]));
+  const usageTodayMap = new Map(usageByCompanyToday.map((u) => [u.companyId, u._sum.costUsd ?? 0]));
+  const usageMonthMap = new Map(usageByCompanyMonth.map((u) => [u.companyId, u._sum.costUsd ?? 0]));
+  const attemptsTodayMap = new Map(attemptsByCompanyToday.map((u) => [u.companyId, u._count._all]));
+  const attemptsMonthMap = new Map(attemptsByCompanyMonth.map((u) => [u.companyId, u._count._all]));
+  const inlineCallsTodayMap = new Map(inlineCallsByCompanyToday.map((u) => [u.companyId, u._count._all]));
+  const inlineCallsMonthMap = new Map(inlineCallsByCompanyMonth.map((u) => [u.companyId, u._count._all]));
+  const reservedMap = new Map(reservedByCompany.map((u) => [u.companyId, u._sum.reservedCostUsd ?? 0]));
+  const reservedInlineMap = new Map(reservedInlineByCompany.map((u) => [u.companyId, u._sum.amountUsd ?? 0]));
 
   const funnel = [
     { label: "Entreprises créées", count: companies.length },
@@ -122,6 +142,7 @@ export default async function AdminPage() {
                   <th className="px-3 py-2">Dernière connexion</th>
                   <th className="px-3 py-2">Propositions</th>
                   <th className="px-3 py-2">Coût</th>
+                  {isExplicitAdminEmail(ownerEmail) && <th className="px-3 py-2">Plafonds IA (UTC)</th>}
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>
@@ -142,6 +163,15 @@ export default async function AdminPage() {
                       </td>
                       <td className="px-3 py-2">{c._count.proposals}</td>
                       <td className="px-3 py-2">{formatUsd(usage?._sum.costUsd ?? 0)}</td>
+                      {isExplicitAdminEmail(ownerEmail) && <td className="px-3 py-2"><CompanyQuotaForm
+                        companyId={c.id}
+                        limits={{ dailyAgentRunLimit: c.dailyAgentRunLimit, monthlyAgentRunLimit: c.monthlyAgentRunLimit, dailySpendLimitUsd: c.dailySpendLimitUsd, monthlySpendLimitUsd: c.monthlySpendLimitUsd }}
+                        dailyRuns={(attemptsTodayMap.get(c.id) ?? 0) + (inlineCallsTodayMap.get(c.id) ?? 0)}
+                        monthlyRuns={(attemptsMonthMap.get(c.id) ?? 0) + (inlineCallsMonthMap.get(c.id) ?? 0)}
+                        dailyCost={usageTodayMap.get(c.id) ?? 0}
+                        monthlyCost={usageMonthMap.get(c.id) ?? 0}
+                        reservedCost={(reservedMap.get(c.id) ?? 0) + (reservedInlineMap.get(c.id) ?? 0)}
+                      /></td>}
                       <td className="px-3 py-2 text-right">
                         <DeleteCompanyButton companyId={c.id} companyName={c.name} />
                       </td>
@@ -150,7 +180,7 @@ export default async function AdminPage() {
                 })}
                 {companies.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-6 text-center text-slate-400">
+                    <td colSpan={isExplicitAdminEmail(ownerEmail) ? 9 : 8} className="px-3 py-6 text-center text-slate-400">
                       Aucune entreprise encore.
                     </td>
                   </tr>

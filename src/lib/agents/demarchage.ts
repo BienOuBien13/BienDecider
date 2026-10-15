@@ -60,6 +60,7 @@ export async function runDemarchageAgent(
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
+          agentRunId: options.agentRunId,
           agent: AGENT_NAME,
           kind: "piste_croissance",
           title: input.title,
@@ -97,6 +98,7 @@ export async function runDemarchageAgent(
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
+          agentRunId: options.agentRunId,
           agent: AGENT_NAME,
           kind: "prospect",
           title: input.name,
@@ -142,6 +144,7 @@ export async function runDemarchageAgent(
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
+          agentRunId: options.agentRunId,
           agent: AGENT_NAME,
           kind: "prospecting_email",
           title: input.title,
@@ -205,6 +208,7 @@ Règles strictes, non négociables :
 
   await recordUsage({
     companyId: company.id,
+    agentRunId: options.agentRunId,
     agent: AGENT_NAME,
     model: AGENT_MODEL,
     usage,

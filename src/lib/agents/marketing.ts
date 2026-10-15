@@ -76,6 +76,7 @@ export async function runMarketingAgent(
       const finding = await prisma.auditFinding.create({
         data: {
           companyId: company.id,
+          agentRunId: options.agentRunId,
           category: input.category,
           title: input.title,
           content: input.summary,
@@ -110,6 +111,7 @@ export async function runMarketingAgent(
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
+          agentRunId: options.agentRunId,
           agent: AGENT_NAME,
           kind: input.kind,
           title: input.title,
@@ -187,7 +189,7 @@ Règles strictes :
     ],
   }));
 
-  await recordUsage({ companyId: company.id, agent: AGENT_NAME, model: AGENT_MODEL, usage });
+  await recordUsage({ companyId: company.id, agentRunId: options.agentRunId, agent: AGENT_NAME, model: AGENT_MODEL, usage });
 
   // Plus de constat "Analyse incomplète" créé à la place d'une erreur : il
   // faisait passer un échec pour un diagnostic, et l'action du plan pour traitée.

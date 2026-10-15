@@ -19,6 +19,9 @@ export async function PATCH(
   if (!existing || existing.companyId !== company.id) {
     return NextResponse.json({ error: "Action introuvable" }, { status: 404 });
   }
+  if (existing.status === "en_cours") {
+    return NextResponse.json({ error: "Cette action est en cours. Attendez la fin avant de la modifier ou de l'écarter." }, { status: 409 });
+  }
 
   const { status, feedback } = await request.json();
 

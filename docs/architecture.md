@@ -40,6 +40,14 @@ flowchart LR
 
 **Garde-fou non négociable, commun à tous** : chaque outil d'agent **écrit en base** (`create`), il n'appelle **jamais** une API externe. L'exécution réelle est un code séparé (`src/lib/site/publish.ts` aujourd'hui, seule exécution existante), déclenché uniquement sur une proposition déjà `validee`.
 
+### 3.4 Lancements persistés et quotas
+
+Les demandes des agents et la génération de plan sont inscrites dans `AgentRun` avant de rendre la réponse HTTP (`202`). Le lancement d'une action de plan la réclame atomiquement (`propose` → `en_cours`) et lie le run, les productions, constats et événements de coût. Une clé unique par entreprise et par clé active évite qu'un double clic ou deux onglets créent deux runs ; les demandes directes identiques sont dédupliquées pendant cinq minutes après succès. Une nouvelle demande est permise ensuite. Une relance d'un échec de plan exige explicitement l'identifiant de ce run.
+
+Le traitement utilise `after()` de Next.js après la réponse, avec `maxDuration=60` sur la route : c'est du travail post-réponse **borné par la durée de la fonction Vercel**, pas une queue indépendante du fournisseur. La base reste la source d'état ; le polling permet de reprendre un run en attente, de constater un dépassement de délai et d'offrir une relance explicite. Une coupure peut laisser des propositions partielles : elles sont liées au run, et les limites de reprise dépendent du résultat déjà produit. Pour une queue durable avec workers indépendants ou tâches plus longues, un fournisseur de queue externe restera nécessaire.
+
+Les plafonds par entreprise sont en UTC : 10 tentatives/jour, 100/mois, 5 USD/jour et 25 USD/mois par défaut, modifiables par un administrateur explicite. Chaque début de tentative est compté, y compris une relance. Les coûts sont calculés par `UsageEvent` avec le barème versionné dans `src/lib/usage.ts`. Un run en cours réserve 1 USD ; un appel synchrone réserve aussi 1 USD jusqu'à l'enregistrement de son coût ou l'expiration de 70 secondes. Les lancements comparent coût enregistré + réservations actives au plafond dans une transaction verrouillée par entreprise. **Ce contrôle applicatif n'est pas un plafond fournisseur Anthropic** : un appel individuel peut coûter plus que sa réservation estimée, et la facturation fournisseur peut être retardée. Garder aussi des alertes/plafonds au niveau du compte fournisseur.
+
 ### 3.2 Orchestration par Paul
 
 ```mermaid
@@ -95,8 +103,14 @@ erDiagram
     Company ||--o{ AuditFinding : "a des constats"
     Company ||--o{ ChatMessage : "discute avec Paul"
     Company ||--o{ UsageEvent : "consomme du modèle"
+    Company ||--o{ AgentRun : "exécute en arrière-plan"
+    Company ||--o{ AgentRunAttempt : "compte les tentatives"
+    Company ||--o{ UsageReservation : "réserve le budget"
     Company ||--o{ ChannelConnection : "connecte (OAuth)"
     ActionPlanItem ||--o{ AgentProposal : "déclenche"
+    ActionPlanItem ||--o{ AgentRun : "est lancée par"
+    AgentRun ||--o{ UsageEvent : "trace le coût"
+    AgentRun ||--o{ AgentProposal : "produit"
     AgentProposal ||--o| ExecutionLog : "trace l'exécution"
 
     Company {
@@ -130,6 +144,12 @@ erDiagram
         int inputTokens
         int outputTokens
         float costUsd
+    }
+    AgentRun {
+        string status "queued / running / succeeded / failed"
+        int attempts
+        int maxDurationSeconds
+        float reservedCostUsd
     }
 ```
 

@@ -2,17 +2,45 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import type { AgentRunView } from "@/lib/agent-run-types";
+import { waitForAgentRun } from "@/lib/agent-runs-client";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 
-export function EquipeClient() {
+export function EquipeClient({ initialAgentRuns }: { initialAgentRuns: AgentRunView[] }) {
   const { requestProfile, profileDialog, checking } = useAgentProfileCompletion();
   const [running, setRunning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [newsContext, setNewsContext] = useState("");
   const [prospectDescription, setProspectDescription] = useState("");
+  const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
+
+  async function monitorRun(runId: string) {
+    try {
+      const finished = await waitForAgentRun(runId, (run) => {
+        setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 12));
+      });
+      if (finished?.status === "failed") setError(finished.errorMessage ?? "L'agent a échoué. Vous pouvez relancer la demande.");
+      if (finished?.status === "succeeded") setDone(true);
+    } catch (pollError) {
+      setError(pollError instanceof Error ? pollError.message : "Impossible de suivre l'exécution.");
+    }
+  }
+
+  async function checkRun(runId: string) {
+    try {
+      const response = await fetch(`/api/agent-runs/${encodeURIComponent(runId)}`);
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.run) throw new Error(data?.error ?? "Impossible de vérifier l'exécution.");
+      setAgentRuns((previous) => [data.run, ...previous.filter((entry) => entry.id !== data.run.id)].slice(0, 12));
+      if (data.run.status === "failed") setError(data.run.errorMessage ?? "L'agent a échoué. Vous pouvez relancer la demande.");
+      if (data.run.status === "succeeded") setDone(true);
+    } catch (checkError) {
+      setError(checkError instanceof Error ? checkError.message : "Impossible de vérifier l'exécution.");
+    }
+  }
 
   async function run(key: "contenu" | "demarchage") {
     setRunning(key);
@@ -22,11 +50,16 @@ export function EquipeClient() {
       const response = await fetch(`/api/agents/${key}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(key === "contenu" ? { newsContext: newsContext || undefined } : { prospectDescription: prospectDescription || undefined }),
+        body: JSON.stringify(key === "contenu"
+          ? { newsContext: newsContext || undefined, requestId: crypto.randomUUID() }
+          : { prospectDescription: prospectDescription || undefined, requestId: crypto.randomUUID() }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error || "La demande a échoué. Réessayez.");
-      setDone(true);
+      const run = data.run as AgentRunView;
+      setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 12));
+      setDone(false);
+      void monitorRun(run.id);
     } catch (error) {
       setError(error instanceof Error ? error.message : "La demande a échoué.");
     } finally {
@@ -42,6 +75,17 @@ export function EquipeClient() {
       </header>
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {done && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Demande traitée. <Link href="/dashboard?view=validation" className="font-medium underline">Examiner les productions</Link></p>}
+      {agentRuns.some((run) => run.status === "queued" || run.status === "running" || run.status === "failed") && <section className="mt-5 border-y border-slate-200 py-3" aria-label="Exécutions récentes">
+        <h2 className="text-sm font-medium">Exécutions récentes</h2>
+        <ul className="mt-2 space-y-2 text-sm">
+          {agentRuns.filter((run) => run.status === "queued" || run.status === "running" || run.status === "failed").slice(0, 5).map((run) => (
+            <li key={run.id} className="flex flex-wrap items-center justify-between gap-2">
+              <span>{PERSONAS[run.agent as AgentKey]?.name ?? run.agent}: {run.status === "queued" ? "Dans la file" : run.status === "running" ? "En cours" : run.errorMessage ?? "Échec, relançable"}</span>
+              {(run.status === "queued" || run.status === "running") && <button onClick={() => void checkRun(run.id)} className="text-indigo-600 underline">Vérifier</button>}
+            </li>
+          ))}
+        </ul>
+      </section>}
       {profileDialog}
       <div className="mt-6 divide-y divide-slate-200 border-t border-slate-200">
         {(["co_ceo", "marketing", "contenu", "demarchage"] as AgentKey[]).map((key) => {
@@ -68,7 +112,7 @@ export function EquipeClient() {
                       {key === "contenu" ? "Actualité à communiquer (facultatif)" : "Prospects visés (facultatif)"}
                       <input value={key === "contenu" ? newsContext : prospectDescription} onChange={(event) => key === "contenu" ? setNewsContext(event.target.value) : setProspectDescription(event.target.value)} className="mt-1 block w-full rounded-lg border px-3 py-2 text-sm" />
                     </label>
-                    <button disabled={running !== null || checking} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">{running === key ? "En préparation…" : "Confier la demande"}</button>
+                    <button disabled={running !== null || checking || agentRuns.some((run) => run.agent === key && (run.status === "queued" || run.status === "running"))} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-50">{running === key ? "Mise en file…" : agentRuns.some((run) => run.agent === key && (run.status === "queued" || run.status === "running")) ? "En cours" : agentRuns.some((run) => run.agent === key && run.status === "failed") ? "Relancer" : "Confier la demande"}</button>
                   </form>
                 </details>
               )}

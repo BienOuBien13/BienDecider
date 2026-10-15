@@ -88,9 +88,11 @@ export async function runToolLoop<
   };
 }
 
-/** Enregistre un appel modèle pour la vue admin. Ne doit jamais faire échouer l'agent appelant en cas d'erreur d'écriture. */
+/** Enregistre le coût mesuré ; les appels soumis à un budget ne peuvent ignorer un échec d'écriture. */
 export async function recordUsage(params: {
   companyId: string;
+  agentRunId?: string;
+  reservationId?: string;
   agent: string;
   model: string;
   usage: UsageLike;
@@ -100,25 +102,36 @@ export async function recordUsage(params: {
   const cacheWriteTokens = params.usage?.cache_creation_input_tokens ?? 0;
   const cacheReadTokens = params.usage?.cache_read_input_tokens ?? 0;
   try {
-    await prisma.usageEvent.create({
-      data: {
-        companyId: params.companyId,
-        agent: params.agent,
-        model: params.model,
-        // Tokens "entrée" au sens large (frais + écrits en cache + lus du
-        // cache) : pas de colonne dédiée au détail cache pour l'instant,
-        // seul costUsd a besoin de la tarification différenciée.
-        inputTokens: inputTokens + cacheWriteTokens + cacheReadTokens,
-        outputTokens,
-        costUsd: estimateCostUsd(params.model, {
-          input: inputTokens,
-          output: outputTokens,
-          cacheWrite: cacheWriteTokens,
-          cacheRead: cacheReadTokens,
-        }),
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.usageEvent.create({
+        data: {
+          companyId: params.companyId,
+          agentRunId: params.agentRunId,
+          reservationId: params.reservationId,
+          agent: params.agent,
+          model: params.model,
+          // Tokens "entrée" au sens large (frais + écrits en cache + lus du
+          // cache) : pas de colonne dédiée au détail cache pour l'instant,
+          // seul costUsd a besoin de la tarification différenciée.
+          inputTokens: inputTokens + cacheWriteTokens + cacheReadTokens,
+          outputTokens,
+          costUsd: estimateCostUsd(params.model, {
+            input: inputTokens,
+            output: outputTokens,
+            cacheWrite: cacheWriteTokens,
+            cacheRead: cacheReadTokens,
+          }),
+        },
+      });
+      if (params.reservationId) {
+        await tx.usageReservation.updateMany({
+          where: { id: params.reservationId, companyId: params.companyId, releasedAt: null },
+          data: { releasedAt: new Date() },
+        });
+      }
     });
   } catch (error) {
+    if (params.agentRunId || params.reservationId) throw error;
     console.error("Erreur enregistrement usage (non bloquant):", error);
   }
 }

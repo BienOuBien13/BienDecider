@@ -58,6 +58,7 @@ export async function runContenuAgent(
       const proposal = await prisma.agentProposal.create({
         data: {
           companyId: company.id,
+          agentRunId: options.agentRunId,
           agent: AGENT_NAME,
           kind: input.kind,
           title: input.title,
@@ -116,7 +117,7 @@ ${await getFindingsContextForContent(companyId)}`;
     ],
   }));
 
-  await recordUsage({ companyId: company.id, agent: AGENT_NAME, model: AGENT_MODEL, usage });
+  await recordUsage({ companyId: company.id, agentRunId: options.agentRunId, agent: AGENT_NAME, model: AGENT_MODEL, usage });
 
   ensureAgentProduced(PERSONA.name, createdProposalIds.length, { stopReason: finalMessage.stop_reason, usage });
 

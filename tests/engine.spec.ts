@@ -1,6 +1,6 @@
 import { test as base, expect } from "@playwright/test";
 import type { Company } from "@prisma/client";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { requireLocalDatabase } from "./support/local-database";
 import { createSessionToken } from "../src/lib/session-token";
 
@@ -104,24 +104,124 @@ test("an agent that produces nothing raises a displayable error, technical error
 
 test("a failed launch shows an error, keeps the action to launch and creates no placeholder finding", async ({ company, request }) => {
   test.skip(Boolean(process.env.ANTHROPIC_API_KEY), "Runs only without a model key, so that agent calls fail instead of reaching the provider.");
+  test.setTimeout(60000);
   if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for engine tests.");
   const { prisma } = await import("../src/lib/prisma");
   const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
   const headers = { Cookie: `pepito_session=${createSessionToken(company.ownerEmail, company.sessionVersion, process.env.SESSION_SECRET)}`, Origin: baseURL };
 
+  async function waitForFailedRun(runId: string) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const response = await request.get(`${baseURL}/api/agent-runs/${runId}`, { headers });
+      expect(response.status()).toBe(200);
+      const { run } = await response.json();
+      if (run.status === "failed") return run;
+      if (run.status === "succeeded") throw new Error(`Expected ${runId} to fail without a model key.`);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(`Agent run ${runId} did not reach a terminal state.`);
+  }
+
   for (const agent of ["marketing", "contenu", "demarchage"]) {
     const item = await prisma.actionPlanItem.create({ data: { companyId: company.id, agent, title: `Action ${agent}`, rationale: "Test d'échec", timing: "Aujourd'hui" } });
     const response = await request.post(`${baseURL}/api/action-plan/${item.id}/launch`, { headers, data: {} });
-    expect(response.status(), agent).toBe(500);
-    const { error } = await response.json();
-    expect(error, agent).toMatch(/^(Martine|Camille|Jean-Claude) (est indisponible pour le moment|n'a pas pu produire de résultat exploitable)/);
+    expect(response.status(), agent).toBe(202);
+    const { run: firstRun } = await response.json();
+
+    const duplicate = await request.post(`${baseURL}/api/action-plan/${item.id}/launch`, { headers, data: {} });
+    expect([202, 409], agent).toContain(duplicate.status());
+    const duplicateBody = await duplicate.json();
+    expect(duplicateBody.run.id, agent).toBe(firstRun.id);
+    expect(await prisma.agentRun.count({ where: { companyId: company.id, planItemId: item.id } }), agent).toBe(1);
+
+    const failedRun = await waitForFailedRun(firstRun.id);
+    expect(failedRun.errorMessage, agent).toMatch(/(indisponible|n'a pas pu produire)/);
     expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status, agent).toBe("propose");
+
+    const retry = await request.post(`${baseURL}/api/action-plan/${item.id}/launch`, { headers, data: { retryRunId: firstRun.id } });
+    expect(retry.status(), agent).toBe(202);
+    expect((await retry.json()).run.id, agent).toBe(firstRun.id);
+    expect((await waitForFailedRun(firstRun.id)).attempts, agent).toBe(2);
+    expect(await prisma.agentRun.count({ where: { companyId: company.id, planItemId: item.id } }), agent).toBe(1);
   }
-  const direct = await request.post(`${baseURL}/api/agents/marketing/run`, { headers, data: {} });
-  expect(direct.status()).toBe(500);
-  expect((await direct.json()).error).toMatch(/^Martine /);
+  const directDedupeKey = `direct:${createHash("sha256").update(JSON.stringify({ agent: "marketing", newsContext: "", prospectDescription: "" })).digest("hex")}`;
+  const existingDirectRun = await prisma.agentRun.create({ data: {
+    companyId: company.id, agent: "marketing", requestKey: `seed-${randomUUID()}`, activeDedupeKey: directDedupeKey,
+    payload: { kind: "direct", agent: "marketing" }, status: "running", startedAt: new Date(),
+  } });
+  const [direct, duplicateDirect] = await Promise.all([
+    request.post(`${baseURL}/api/agents/marketing/run`, { headers, data: { requestId: randomUUID() } }),
+    request.post(`${baseURL}/api/agents/marketing/run`, { headers, data: { requestId: randomUUID() } }),
+  ]);
+  expect([202, 409]).toContain(direct.status());
+  expect([202, 409]).toContain(duplicateDirect.status());
+  const directRun = (await direct.json()).run;
+  const duplicateDirectBody = await duplicateDirect.json();
+  expect(directRun.id).toBe(existingDirectRun.id);
+  expect(duplicateDirectBody.run.id).toBe(existingDirectRun.id);
+  expect(await prisma.agentRun.count({ where: { companyId: company.id, activeDedupeKey: directDedupeKey } })).toBe(1);
   expect(await prisma.auditFinding.count({ where: { companyId: company.id } })).toBe(0);
   expect(await prisma.agentProposal.count({ where: { companyId: company.id } })).toBe(0);
+});
+
+test("agent launch quotas block daily and monthly limits before creating a run", async ({ company, request }) => {
+  if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for engine tests.");
+  const { prisma } = await import("../src/lib/prisma");
+  const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
+  const headers = { Cookie: `pepito_session=${createSessionToken(company.ownerEmail, company.sessionVersion, process.env.SESSION_SECRET)}`, Origin: baseURL };
+  const item = await prisma.actionPlanItem.create({ data: { companyId: company.id, agent: "contenu", title: "Action sous quota nul", rationale: "Test quota", timing: "Aujourd'hui" } });
+
+  await prisma.company.update({ where: { id: company.id }, data: { dailyAgentRunLimit: 0, monthlyAgentRunLimit: 100, dailySpendLimitUsd: 5, monthlySpendLimitUsd: 25 } });
+  const dailyBlocked = await request.post(`${baseURL}/api/action-plan/${item.id}/launch`, { headers, data: {} });
+  expect(dailyBlocked.status()).toBe(429);
+  expect((await dailyBlocked.json()).error).toContain("journalier");
+  expect(await prisma.agentRun.count({ where: { companyId: company.id } })).toBe(0);
+  expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("propose");
+
+  await prisma.company.update({ where: { id: company.id }, data: { dailyAgentRunLimit: 10, monthlyAgentRunLimit: 0 } });
+  const monthlyBlocked = await request.post(`${baseURL}/api/action-plan/${item.id}/launch`, { headers, data: {} });
+  expect(monthlyBlocked.status()).toBe(429);
+  expect((await monthlyBlocked.json()).error).toContain("mensuel");
+  expect(await prisma.agentRunAttempt.count({ where: { companyId: company.id } })).toBe(0);
+});
+
+test("an agent run reserves budget before queueing and rejects overspend", async ({ company, request }) => {
+  if (!process.env.SESSION_SECRET) throw new Error("SESSION_SECRET is required for engine tests.");
+  const { prisma } = await import("../src/lib/prisma");
+  const baseURL = process.env.UX_TEST_BASE_URL ?? "http://localhost:3000";
+  const headers = { Cookie: `pepito_session=${createSessionToken(company.ownerEmail, company.sessionVersion, process.env.SESSION_SECRET)}`, Origin: baseURL };
+  const item = await prisma.actionPlanItem.create({ data: { companyId: company.id, agent: "contenu", title: "Action au budget", rationale: "Test budget", timing: "Aujourd'hui" } });
+  await prisma.usageEvent.create({ data: { companyId: company.id, agent: "contenu", model: "claude-sonnet-5-5", inputTokens: 100, outputTokens: 100, costUsd: 0.5 } });
+  await prisma.company.update({ where: { id: company.id }, data: { dailyAgentRunLimit: 10, monthlyAgentRunLimit: 100, dailySpendLimitUsd: 0.5, monthlySpendLimitUsd: 25 } });
+
+  const blocked = await request.post(`${baseURL}/api/action-plan/${item.id}/launch`, { headers, data: {} });
+  expect(blocked.status()).toBe(429);
+  expect((await blocked.json()).error).toContain("budget journalier");
+  expect(await prisma.agentRun.count({ where: { companyId: company.id } })).toBe(0);
+  expect((await prisma.actionPlanItem.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("propose");
+});
+
+test("synchronous model calls reserve spend and release it only after recording actual usage", async ({ company }) => {
+  const { prisma } = await import("../src/lib/prisma");
+  const { AgentRunQuotaError, reserveUsageBudget } = await import("../src/lib/agent-runs");
+  const { recordUsage } = await import("../src/lib/usage");
+  await prisma.company.update({ where: { id: company.id }, data: { dailySpendLimitUsd: 1, monthlySpendLimitUsd: 5 } });
+  const reservation = await reserveUsageBudget(company.id, "unit-test");
+
+  await expect(reserveUsageBudget(company.id, "parallel-test")).rejects.toBeInstanceOf(AgentRunQuotaError);
+  expect(await prisma.usageReservation.findUniqueOrThrow({ where: { id: reservation.id } })).toMatchObject({ releasedAt: null, amountUsd: 1 });
+
+  await recordUsage({
+    companyId: company.id,
+    reservationId: reservation.id,
+    agent: "co_ceo",
+    model: "claude-sonnet-5-5",
+    usage: { input_tokens: 1000, output_tokens: 100, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+  });
+  const released = await prisma.usageReservation.findUniqueOrThrow({ where: { id: reservation.id }, include: { usageEvent: true } });
+  expect(released.releasedAt).not.toBeNull();
+  expect(released.usageEvent?.reservationId).toBe(reservation.id);
+  expect(released.usageEvent?.costUsd).toBeGreaterThan(0);
 });
 
 test("Camille gets the diagnosis detail and Jean-Claude the competition findings", async ({ company }) => {

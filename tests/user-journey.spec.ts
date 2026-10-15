@@ -671,10 +671,12 @@ test("agents request only missing profile details and wait for successful partia
     await prisma.company.update({ where: { id: company.id }, data: {
       description: null, phone: null, certifications: null, openingHours: null, website: null,
     } });
+    const successfulRun = { id: "run-test-camille", agent: "contenu", planItemId: null, status: "succeeded", attempts: 1, maxDurationSeconds: 60, queuedAt: new Date().toISOString(), startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(), resultCount: 0, errorMessage: null };
     await page.route("**/api/agents/contenu/run", (route) => {
       agentCalls += 1;
-      return route.fulfill({ json: { proposals: [] } });
+      return route.fulfill({ status: 202, json: { run: successfulRun } });
     });
+    await page.route("**/api/agent-runs/run-test-camille", (route) => route.fulfill({ json: { run: successfulRun } }));
     await page.goto(`${baseURL}/equipe`);
     const camille = page.locator("section").filter({ has: page.getByRole("heading", { name: "Camille", exact: true }) });
     await camille.getByText("Demande ponctuelle", { exact: true }).click();

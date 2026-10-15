@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runContenuAgent } from "@/lib/agents/contenu";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { AgentRunQuotaError, enqueueDirectRun } from "@/lib/agent-runs";
 import { getSessionCompany } from "@/lib/session";
-import { agentFailureMessage } from "@/lib/agents/agent-errors";
-import { PERSONAS } from "@/lib/agents/personas";
+
+export const maxDuration = 60;
+
+const requestSchema = z.object({ newsContext: z.string().max(4000).optional(), requestId: z.string().uuid().optional() }).strict();
 
 export async function POST(request: NextRequest) {
+  if (request.headers.get("origin") !== request.nextUrl.origin) return NextResponse.json({ error: "Origine refusée" }, { status: 403 });
   const company = await getSessionCompany();
   if (!company) {
     return NextResponse.json({ error: "Non connecté" }, { status: 401 });
   }
-  const { newsContext } = await request.json();
-
+  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "Demande de contenu invalide." }, { status: 400 });
+  let run;
   try {
-    const proposals = await runContenuAgent(company.id, newsContext);
-    return NextResponse.json(proposals, { status: 201 });
+    run = await enqueueDirectRun({ companyId: company.id, agent: "contenu", requestKey: parsed.data.requestId ?? randomUUID(), newsContext: parsed.data.newsContext });
   } catch (error) {
-    console.error("Erreur agent contenu:", error);
-    return NextResponse.json({ error: agentFailureMessage(error, PERSONAS.contenu.name) }, { status: 500 });
+    if (error instanceof AgentRunQuotaError) return NextResponse.json({ error: error.message }, { status: 429 });
+    throw error;
   }
+  if (run.status === "failed") return NextResponse.json({ error: run.errorMessage ?? "L'agent a échoué. Relancez la demande.", run: { id: run.id, status: run.status } }, { status: 409 });
+  return NextResponse.json({ run }, { status: run.status === "succeeded" ? 200 : 202 });
 }
