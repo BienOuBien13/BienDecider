@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { AgentProposal, ActionPlanItem } from "@prisma/client";
 import type { AgentRunView } from "@/lib/agent-run-types";
-import { waitForAgentRun } from "@/lib/agent-runs-client";
+import { AgentRunTracker, useAgentRunMonitor } from "@/components/agent-run-tracker";
+import { finishedRunMessage } from "@/lib/agent-run-progress";
 import type { SafeCompany } from "@/lib/safe-company";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
@@ -45,6 +46,15 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
   const [discardReason, setDiscardReason] = useState("");
   const [decidedIds, setDecidedIds] = useState<string[]>([]);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const monitorRun = useAgentRunMonitor(initialAgentRuns, {
+    onUpdate: (run) => setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 20)),
+    onFinished: async (finished) => {
+      await refresh();
+      if (finished.status === "failed") setError(finished.errorMessage ?? "L'agent a échoué. Vous pouvez relancer l'action.");
+      else setNotice(finishedRunMessage(finished));
+    },
+    onError: reportError,
+  });
 
   async function refresh() {
     const [planResponse, proposalResponse, runsResponse] = await Promise.all([
@@ -110,18 +120,6 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       void monitorRun(run.id);
     } catch (error) { reportError(error); }
     finally { setBusyId(null); }
-  }
-
-  async function monitorRun(runId: string) {
-    try {
-      const finished = await waitForAgentRun(runId, (run) => {
-        setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 20));
-      });
-      if (!finished) return;
-      await refresh();
-      if (finished.status === "failed") setError(finished.errorMessage ?? "L'agent a échoué. Vous pouvez relancer l'action.");
-      else setNotice(finished.agent === "co_ceo" ? "Le plan de Paul est prêt." : `${finished.resultCount} élément(s) produit(s).`);
-    } catch (error) { reportError(error); }
   }
 
   async function checkRun(runId: string) {
@@ -265,19 +263,7 @@ export function DashboardClient({ company, initialPlanItems, initialAgentRuns, i
       )}
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
-      {agentRuns.some((run) => run.status === "queued" || run.status === "running" || run.status === "failed") && <section className="mt-4 border-b border-slate-200 pb-4" aria-label="Exécutions récentes">
-        <h2 className="text-sm font-medium">Exécutions récentes</h2>
-        <ul className="mt-2 space-y-2 text-sm">
-          {agentRuns.filter((run) => run.status === "queued" || run.status === "running" || run.status === "failed").slice(0, 5).map((run) => (
-            <li key={run.id} className="flex flex-wrap items-center justify-between gap-2">
-              <span>{PERSONAS[run.agent as AgentKey]?.name ?? run.agent}: {run.status === "queued" ? "Dans la file" : run.status === "running" ? "En cours" : run.errorMessage ?? "Échec, relançable"}</span>
-              {run.status === "failed" && run.agent === "co_ceo"
-                ? <button onClick={() => void handleRetryPlanGeneration()} disabled={planLoading} className="text-indigo-600 underline disabled:opacity-50">Relancer Paul</button>
-                : (run.status === "queued" || run.status === "running") && <button onClick={() => void checkRun(run.id)} className="text-indigo-600 underline">Vérifier</button>}
-            </li>
-          ))}
-        </ul>
-      </section>}
+      <AgentRunTracker runs={agentRuns} onCheck={(runId) => void checkRun(runId)} onRetry={() => void handleRetryPlanGeneration()} retryDisabled={planLoading} />
       <nav aria-label="Actions" className="mt-6 flex flex-wrap gap-x-6 border-b border-slate-200">
         {([
           ["plan", "Plan d'action", activeItems.length],

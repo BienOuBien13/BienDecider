@@ -833,6 +833,39 @@ test("Paul is reachable from any page, keeps the conversation and the draft, and
   }
 });
 
+test("a running agent shows indicative steps, is followed again after leaving the page, and its end is announced", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const seeded = await prisma.agentRun.create({ data: {
+      companyId: company.id, agent: "contenu", requestKey: `seed-${randomUUID()}`, activeDedupeKey: `seed-${randomUUID()}`,
+      payload: { kind: "direct", agent: "contenu" }, status: "running", startedAt: new Date(Date.now() - 5000), attempts: 1,
+    } });
+    const view = { id: seeded.id, agent: "contenu", planItemId: null, attempts: 1, maxDurationSeconds: 60, queuedAt: seeded.queuedAt.toISOString(), startedAt: seeded.startedAt!.toISOString(), errorMessage: null };
+    let finished = false;
+    await page.route(`**/api/agent-runs/${seeded.id}`, (route) => route.fulfill({ json: { run: finished
+      ? { ...view, status: "succeeded", finishedAt: new Date().toISOString(), resultCount: 3 }
+      : { ...view, status: "running", finishedAt: null, resultCount: 0 } } }));
+
+    await page.goto(`${baseURL}/equipe`);
+    const tracker = page.getByRole("region", { name: "Exécutions récentes" });
+    await expect(tracker.getByText("Lecture de votre activité et du diagnostic").first()).toBeVisible();
+    await expect(tracker.getByText("Rédaction des contenus")).toBeVisible();
+    await expect(tracker.getByText(/Durée habituelle : environ 30 s/)).toBeVisible();
+    await expect(tracker.getByText(/Vous pouvez quitter cette page/)).toBeVisible();
+
+    await page.goto(`${baseURL}/dashboard`);
+    await page.goBack();
+    await expect(tracker.getByText("Lecture de votre activité et du diagnostic").first()).toBeVisible();
+
+    finished = true;
+    await expect(page.getByRole("status")).toContainText("Demande traitée");
+    await expect(tracker.getByText("Camille a terminé : 3 élément(s) à examiner.")).toBeVisible();
+    await expect(tracker.getByRole("link", { name: "Voir le résultat" })).toHaveAttribute("href", "/dashboard?view=validation");
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
 test("agents request only missing profile details and wait for successful partial saving", async ({ page, company }, testInfo) => {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
   let agentCalls = 0;
