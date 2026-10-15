@@ -35,6 +35,7 @@ function sanitizeHtml(html: string): string {
 }
 import { canExecuteAction } from "@/lib/delegation-risk";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
+import { reserveUsageBudget } from "@/lib/agent-runs";
 
 export async function publishSiteFromProposal(proposalId: string, expectedVersion: number) {
   const proposal = await prisma.agentProposal.findUniqueOrThrow({
@@ -56,6 +57,7 @@ export async function publishSiteFromProposal(proposalId: string, expectedVersio
   }
 
   const company = proposal.company;
+  const reservation = await reserveUsageBudget(company.id, "site_publish");
 
   // Prompt strictement identique pour toutes les entreprises et tous les
   // appels (aucune donnée entreprise dans le system — elle est dans le
@@ -88,6 +90,7 @@ ${proposal.content}`,
     .join("\n");
   await recordUsage({
     companyId: company.id,
+    reservationId: reservation.id,
     agent: "site_publish",
     model: AGENT_MODEL,
     usage: response.usage,

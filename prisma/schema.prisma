@@ -13,6 +13,11 @@ model Company {
   ownerEmail      String    @unique // identifiant de session (login minimal, cf. docs/architecture-technique.md)
   passwordHash    String? // hash+sel (scrypt), jamais en clair — cf. src/lib/password.ts. Null = compte créé avant ce champ (accepte un premier mot de passe au prochain login).
   sessionVersion  Int       @default(0)
+  dailyAgentRunLimit       Int       @default(10)
+  monthlyAgentRunLimit     Int       @default(100)
+  dailySpendLimitUsd       Float     @default(5)
+  monthlySpendLimitUsd     Float     @default(25)
+  quotaEpoch               Int       @default(0)
   failedLoginAttempts Int @default(0) // anti-force-brute, cf. docs/backlog.md
   lockedUntil     DateTime? // compte verrouillé jusqu'à cette date après trop d'échecs
   name            String
@@ -54,6 +59,9 @@ model Company {
   chatMessages    ChatMessage[]
   planItems       ActionPlanItem[]
   usageEvents     UsageEvent[]
+  agentRuns       AgentRun[]
+  agentRunAttempts AgentRunAttempt[]
+  usageReservations UsageReservation[]
   leads           Lead[]
   uncoveredRequests UncoveredRequest[]
   linkedinAuthorizations LinkedInAuthorization[]
@@ -109,12 +117,30 @@ model UsageEvent {
   id           String   @id @default(cuid())
   companyId    String
   company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agentRunId   String?
+  agentRun     AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
   agent        String // marketing, contenu, demarchage, co_ceo, site_publish
   model        String // ex: claude-sonnet-5-5
   inputTokens  Int
   outputTokens Int
   costUsd      Float
   createdAt    DateTime @default(now())
+  reservationId String? @unique
+  reservation   UsageReservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+}
+
+model UsageReservation {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  purpose     String
+  amountUsd   Float    @default(1)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  releasedAt  DateTime?
+  usageEvent  UsageEvent?
+
+  @@index([companyId, expiresAt])
 }
 
 /**
@@ -133,10 +159,59 @@ model ActionPlanItem {
   title       String
   rationale   String
   timing      String // ex: "cette semaine", "aujourd'hui"
-  status      String   @default("propose") // propose, lance, termine, ecarte
+  status      String   @default("propose") // propose, en_cours, lance, termine, ecarte
   feedback    String? // raison donnée par le dirigeant quand il écarte l'action — relue par Paul au plan suivant
   createdAt   DateTime @default(now())
   proposals   AgentProposal[]
+  agentRuns   AgentRun[]
+}
+
+model AgentRun {
+  id                 String         @id @default(cuid())
+  companyId          String
+  company            Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planItemId         String?
+  planItem           ActionPlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+  agent              String
+  requestKey         String
+  activeDedupeKey    String?
+  payload            Json
+  status             String         @default("queued")
+  attempts           Int            @default(0)
+  reservedCostUsd    Float          @default(1)
+  maxDurationSeconds Int            @default(60)
+  queuedAt           DateTime       @default(now())
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  resultCount        Int            @default(0)
+  errorMessage       String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  attemptHistory      AgentRunAttempt[]
+  usageEvents         UsageEvent[]
+  proposals           AgentProposal[]
+  auditFindings       AuditFinding[]
+
+  @@unique([companyId, requestKey])
+  @@unique([companyId, activeDedupeKey])
+  @@index([companyId, status, createdAt])
+  @@index([status, queuedAt])
+}
+
+model AgentRunAttempt {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agentRunId  String
+  agentRun    AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  status      String   @default("queued")
+  queuedAt    DateTime @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  errorMessage String?
+
+  @@index([companyId, queuedAt])
+  @@index([agentRunId, queuedAt])
 }
 
 model ChatMessage {
@@ -160,6 +235,8 @@ model AuditFinding {
   whatWorks   String? // "Ce qui est bien"
   toImprove   String? // "Ce qu'il faut améliorer"
   actionItems Json? // Plan d'action suggéré, potentiellement exécutable par Pepito : { agent, title, rationale }[]
+  agentRunId  String?
+  agentRun    AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
 }
 
@@ -184,6 +261,8 @@ model AgentProposal {
   id          String   @id @default(cuid())
   companyId   String
   company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  agentRunId  String?
+  agentRun    AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
   agent       String // marketing, contenu, demarchage
   kind        String // ex: gbp_update, review_reply, social_post, prospecting_email
   title       String

@@ -109,6 +109,8 @@ export type AgentRunOptions = {
   brief?: string;
   /** Rattache les propositions créées à l'action du plan correspondante. */
   planItemId?: string;
+  /** Run persistant qui a créé les éléments produits. */
+  agentRunId?: string;
 };
 
 export function briefLine(brief?: string): string {

@@ -17,11 +17,14 @@ type Guarded = { method: "GET" | "POST" | "PATCH" | "DELETE"; path: string; deni
 // Toute route API doit figurer ici ou dans PUBLIC_ROUTES : le premier test échoue sinon.
 // `denied` = réponse attendue sans session valide. `[id]` est remplacé par un identifiant quelconque.
 const GUARDED_ROUTES: Guarded[] = [
+  { method: "GET", path: "/api/agent-runs", denied: 401 },
+  { method: "GET", path: "/api/agent-runs/[id]", denied: 401 },
   { method: "POST", path: "/api/action-plan", denied: 401 },
   { method: "PATCH", path: "/api/action-plan/[id]", denied: 401 },
   { method: "POST", path: "/api/action-plan/[id]/launch", denied: 401 },
   { method: "POST", path: "/api/auth/password", denied: 401 },
   { method: "DELETE", path: "/api/admin/companies/[id]", denied: 403 },
+  { method: "PATCH", path: "/api/admin/companies/[id]/limits", denied: 403 },
   { method: "GET", path: "/api/admin/delegation-risk", denied: 403 },
   { method: "PATCH", path: "/api/admin/delegation-risk", denied: 403 },
   { method: "POST", path: "/api/agents/contenu/run", denied: 401 },
@@ -246,6 +249,66 @@ test("five wrong passwords lock the account, even for the right password", async
     expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).failedLoginAttempts).toBe(0);
   } finally {
     await prisma.company.deleteMany({ where: { ownerEmail: email } });
+    await prisma.$disconnect();
+  }
+});
+
+test("only an explicit administrator can configure company agent quotas", async ({ request }) => {
+  const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((email) => email.trim()).filter(Boolean);
+  test.skip(admins.length === 0, "Quota administration requires ADMIN_EMAILS, as configured in CI.");
+  const prisma = openDatabase();
+  const adminEmail = admins[0];
+  const ownerEmail = `security-quota-${randomUUID()}@example.invalid`;
+  let createdAdmin = false;
+  let adminCompany = await prisma.company.findUnique({ where: { ownerEmail: adminEmail } });
+  if (!adminCompany) {
+    adminCompany = await prisma.company.create({ data: { ownerEmail: adminEmail, name: "Admin quota test", trade: "Artisan", servingArea: "Paris" } });
+    createdAdmin = true;
+  }
+  const company = await prisma.company.create({ data: { ownerEmail, name: "Quota test", trade: "Artisan", servingArea: "Paris" } });
+  const original = {
+    dailyAgentRunLimit: company.dailyAgentRunLimit,
+    monthlyAgentRunLimit: company.monthlyAgentRunLimit,
+    dailySpendLimitUsd: company.dailySpendLimitUsd,
+    monthlySpendLimitUsd: company.monthlySpendLimitUsd,
+  };
+  const path = `${baseURL}/api/admin/companies/${company.id}/limits`;
+  const adminHeaders = { Cookie: sessionCookie(adminEmail, adminCompany.sessionVersion), Origin: baseURL };
+  const userHeaders = { Cookie: sessionCookie(ownerEmail, company.sessionVersion), Origin: baseURL };
+  try {
+    expect((await request.patch(path, { headers: userHeaders, data: original })).status()).toBe(403);
+    expect((await request.patch(path, { headers: { ...adminHeaders, Origin: "https://attacker.invalid" }, data: original })).status()).toBe(403);
+    expect((await request.patch(path, { headers: adminHeaders, data: { ...original, dailyAgentRunLimit: 31, monthlyAgentRunLimit: 30 } })).status()).toBe(400);
+    const updated = await request.patch(path, { headers: adminHeaders, data: {
+      dailyAgentRunLimit: 4, monthlyAgentRunLimit: 30, dailySpendLimitUsd: 2.5, monthlySpendLimitUsd: 20,
+    } });
+    expect(updated.status()).toBe(200);
+    expect(await updated.json()).toMatchObject({ companyId: company.id, dailyAgentRunLimit: 4, monthlyAgentRunLimit: 30, dailySpendLimitUsd: 2.5, monthlySpendLimitUsd: 20 });
+    expect(await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).toMatchObject({ dailyAgentRunLimit: 4, monthlyAgentRunLimit: 30, dailySpendLimitUsd: 2.5, monthlySpendLimitUsd: 20 });
+  } finally {
+    await prisma.company.delete({ where: { id: company.id } });
+    if (createdAdmin) await prisma.company.delete({ where: { id: adminCompany.id } });
+    await prisma.$disconnect();
+  }
+});
+
+test("company run history and a run detail never cross company boundaries", async ({ request }) => {
+  const prisma = openDatabase();
+  const owner = await prisma.company.create({ data: { ownerEmail: `security-run-owner-${randomUUID()}@example.invalid`, name: "Run owner", trade: "Artisan", servingArea: "Lyon" } });
+  const other = await prisma.company.create({ data: { ownerEmail: `security-run-other-${randomUUID()}@example.invalid`, name: "Other run owner", trade: "Artisan", servingArea: "Paris" } });
+  const run = await prisma.agentRun.create({ data: {
+    companyId: other.id, agent: "contenu", requestKey: `security-${randomUUID()}`, payload: { kind: "direct", agent: "contenu" }, status: "failed", errorMessage: "internal test error",
+  } });
+  try {
+    const cookie = sessionCookie(owner.ownerEmail, owner.sessionVersion);
+    const list = await request.get(`${baseURL}/api/agent-runs`, { headers: { Cookie: cookie } });
+    expect(list.status()).toBe(200);
+    expect(await list.json()).toEqual({ runs: [] });
+    const detail = await request.get(`${baseURL}/api/agent-runs/${run.id}`, { headers: { Cookie: cookie } });
+    expect(detail.status()).toBe(404);
+    expect(await detail.text()).not.toContain("internal test error");
+  } finally {
+    await prisma.company.deleteMany({ where: { id: { in: [owner.id, other.id] } } });
     await prisma.$disconnect();
   }
 });

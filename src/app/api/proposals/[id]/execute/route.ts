@@ -5,6 +5,9 @@ import { publishSiteFromProposal } from "@/lib/site/publish";
 import { getSessionCompany } from "@/lib/session";
 import { publishProposalToFacebook } from "@/lib/social/facebook-publish";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
+import { AgentRunQuotaError } from "@/lib/agent-runs";
+
+export const maxDuration = 60;
 
 /**
  * Exécution réelle d'une proposition VALIDÉE : publier le site d'une page,
@@ -47,6 +50,7 @@ export async function POST(
     return NextResponse.json({ url: `/site/${slug}`, message: "Site publié. La publication figure dans les résultats." });
   } catch (error) {
     console.error("Erreur exécution proposition:", error);
+    if (error instanceof AgentRunQuotaError) return NextResponse.json({ error: error.message }, { status: 429 });
     if (error instanceof PublishRefusedError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }

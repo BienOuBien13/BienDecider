@@ -19,11 +19,20 @@ export default async function DashboardPage({ searchParams }: {
   const company = await prisma.company.findUnique({ where: { ownerEmail } });
   if (!company || !company.name) redirect("/onboarding");
 
-  const [planItems, chatMessages, proposals, diagnosticCount, riskSettings, facebookConnection] = await Promise.all([
+  const [planItems, recentAgentRuns, chatMessages, proposals, diagnosticCount, riskSettings, facebookConnection] = await Promise.all([
     prisma.actionPlanItem.findMany({
       where: { companyId: company.id },
       orderBy: { createdAt: "asc" },
-      include: { proposals: { orderBy: { createdAt: "desc" } } },
+      include: {
+        proposals: { orderBy: { createdAt: "desc" } },
+        agentRuns: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, agent: true, planItemId: true, status: true, attempts: true, maxDurationSeconds: true, queuedAt: true, startedAt: true, finishedAt: true, resultCount: true, errorMessage: true } },
+      },
+    }),
+    prisma.agentRun.findMany({
+      where: { companyId: company.id },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { id: true, agent: true, planItemId: true, status: true, attempts: true, maxDurationSeconds: true, queuedAt: true, startedAt: true, finishedAt: true, resultCount: true, errorMessage: true },
     }),
     prisma.chatMessage.findMany({
       where: { companyId: company.id },
@@ -46,6 +55,7 @@ export default async function DashboardPage({ searchParams }: {
       <DashboardClient
         company={omitPasswordHash(company)}
         initialPlanItems={planItems}
+        initialAgentRuns={recentAgentRuns}
         initialChatMessages={chatMessages}
         initialProposals={proposals}
         initialDiagnosticCount={diagnosticCount}

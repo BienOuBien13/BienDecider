@@ -4,6 +4,9 @@ import { runMarketingAgent } from "@/lib/agents/marketing";
 import { runContenuAgent } from "@/lib/agents/contenu";
 import { runDemarchageAgent } from "@/lib/agents/demarchage";
 import { statusAfterRun, type PlanAgent } from "@/lib/agents/plan-items";
+import type { AgentRunOptions } from "@/lib/agents/personas";
+
+export type PlanRunExtras = { newsContext?: string; prospectDescription?: string };
 
 /**
  * Lance l'agent d'une action du plan EN LUI PASSANT L'ACTION COMME BRIEF
@@ -12,11 +15,12 @@ import { statusAfterRun, type PlanAgent } from "@/lib/agents/plan-items";
  * dans le chat. En cas d'échec de l'agent, l'erreur remonte et le statut
  * n'est pas modifié : l'action reste "à lancer".
  */
-export async function runPlanItem(
+export async function executePlanItem(
   item: Pick<ActionPlanItem, "id" | "companyId" | "title" | "rationale"> & { agent: PlanAgent },
-  extras: { newsContext?: string; prospectDescription?: string } = {},
+  extras: PlanRunExtras = {},
+  agentRunId?: string,
 ) {
-  const options = { brief: `${item.title} — ${item.rationale}`, planItemId: item.id };
+  const options: AgentRunOptions = { brief: `${item.title} — ${item.rationale}`, planItemId: item.id, agentRunId };
   let producedCount = 0;
   // Seules les PROPOSITIONS nécessitent une validation (affichées sous
   // l'action dans le dashboard) — les constats d'audit sont informatifs,

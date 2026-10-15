@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getRejectionContext } from "@/lib/agents/rejection-context";
 import { agentFailureMessage } from "@/lib/agents/agent-errors";
 import { PERSONAS, objectiveLine, directionLine, companyProfileLines } from "@/lib/agents/personas";
-import { runPlanItem } from "@/lib/agents/plan-runner";
+import { enqueuePlanRun } from "@/lib/agent-runs";
 import { createChatPlanItem, findLaunchablePlanItem, type PlanAgent } from "@/lib/agents/plan-items";
 import { recordUsage, runToolLoop } from "@/lib/usage";
 import { getFunnelStats, funnelLines } from "@/lib/funnel";
@@ -43,7 +43,7 @@ function uncoveredRequestTool(companyId: string, source: "chat" | "plan") {
  * Garde-fou inchangé : déléguer ne fait que créer des propositions (ou des
  * constats), jamais d'exécution réelle.
  */
-export async function runCoCeoTurn(companyId: string, userMessage: string) {
+export async function runCoCeoTurn(companyId: string, userMessage: string, reservationId?: string) {
   const company = await prisma.company.findUniqueOrThrow({
     where: { id: companyId },
   });
@@ -131,8 +131,9 @@ export async function runCoCeoTurn(companyId: string, userMessage: string) {
       return `ÉCHEC, rien n'a été lancé : aucune action à lancer avec cet identifiant pour ${agentName}. Relis le plan avec get_current_status.`;
     }
     try {
-      const { producedCount, pendingValidation } = await runPlanItem({ ...item, agent }, extras);
-      return `Action « ${item.title} » ${input.planItemId ? "du plan lancée" : "ajoutée au plan et lancée"} : ${producedCount} production(s) de ${agentName} rattachée(s) à cette action, dont ${pendingValidation} en attente de validation dans le dashboard.`;
+      const run = await enqueuePlanRun({ companyId, item: { ...item, agent }, extras });
+      if (run.status === "failed") return `ÉCHEC, rien de nouveau n'a été produit : ${run.errorMessage ?? "relancez l'action depuis le dashboard."}`;
+      return `Action « ${item.title} » ${input.planItemId ? "du plan lancée" : "ajoutée au plan et mise en cours"}. ${agentName} travaille en arrière-plan ; le résultat apparaîtra dans le dashboard (run ${run.id}).`;
     } catch (error) {
       console.error(`Erreur délégation ${agent}:`, error);
       return `ÉCHEC, rien n'a été produit : ${agentFailureMessage(error, agentName)} L'action « ${item.title} » est au plan, à lancer : le dirigeant peut la relancer depuis le plan.`;
@@ -219,6 +220,7 @@ Règles strictes, non négociables :
 
   await recordUsage({
     companyId: company.id,
+    reservationId,
     agent: "co_ceo",
     model: AGENT_MODEL,
     usage,
@@ -238,7 +240,7 @@ Règles strictes, non négociables :
  * pas à l'historique de chat, ne délègue jamais lui-même (chaque item du
  * plan n'est lancé que si l'utilisateur clique "Lancer" dans le dashboard).
  */
-export async function runCoCeoPlanning(companyId: string) {
+export async function runCoCeoPlanning(companyId: string, agentRunId?: string) {
   const company = await prisma.company.findUniqueOrThrow({
     where: { id: companyId },
   });
@@ -342,6 +344,7 @@ ${funnelLines(funnel)}`;
 
   await recordUsage({
     companyId: company.id,
+    agentRunId,
     agent: "co_ceo",
     model: AGENT_MODEL,
     usage,

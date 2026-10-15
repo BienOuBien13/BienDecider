@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { AgentProposal, ChatMessage, ActionPlanItem } from "@prisma/client";
+import type { AgentRunView } from "@/lib/agent-run-types";
+import { waitForAgentRun } from "@/lib/agent-runs-client";
 import type { SafeCompany } from "@/lib/safe-company";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
@@ -10,7 +12,7 @@ import { ProposalCard, type ProposalDecision } from "@/components/proposal-card"
 import { JourneyProgress } from "@/components/journey-progress";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 
-type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[] };
+type PlanItemWithProposals = ActionPlanItem & { proposals: AgentProposal[]; agentRuns: AgentRunView[] };
 type View = "plan" | "validation" | "historique";
 
 function needsAttention(proposal: AgentProposal, facebookPageName: string | null) {
@@ -21,9 +23,10 @@ function needsAttention(proposal: AgentProposal, facebookPageName: string | null
     (proposal.kind === "social_post" && approved && facebookPageName !== null);
 }
 
-export function DashboardClient({ company, initialPlanItems, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
+export function DashboardClient({ company, initialPlanItems, initialAgentRuns, initialChatMessages, initialProposals, initialDiagnosticCount, initialView, riskSettings, facebookPageName }: {
   company: SafeCompany;
   initialPlanItems: PlanItemWithProposals[];
+  initialAgentRuns: AgentRunView[];
   initialChatMessages: ChatMessage[];
   initialProposals: AgentProposal[];
   initialDiagnosticCount: number;
@@ -33,6 +36,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
 }) {
   const { requestProfile, profileDialog, checking } = useAgentProfileCompletion();
   const [planItems, setPlanItems] = useState(initialPlanItems);
+  const [agentRuns, setAgentRuns] = useState(initialAgentRuns);
   const [proposals, setProposals] = useState(initialProposals);
   const [chatMessages, setChatMessages] = useState(initialChatMessages);
   const [chatInput, setChatInput] = useState("");
@@ -48,14 +52,16 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
   const [decidedIds, setDecidedIds] = useState<string[]>([]);
 
   async function refresh() {
-    const [planResponse, proposalResponse] = await Promise.all([
-      fetch(`/api/co-ceo/plan?companyId=${company.id}`), fetch("/api/proposals"),
+    const [planResponse, proposalResponse, runsResponse] = await Promise.all([
+      fetch(`/api/co-ceo/plan?companyId=${company.id}`), fetch("/api/proposals"), fetch("/api/agent-runs"),
     ]);
-    if (!planResponse.ok || !proposalResponse.ok) throw new Error("Impossible d'actualiser les actions. Rechargez la page.");
+    if (!planResponse.ok || !proposalResponse.ok || !runsResponse.ok) throw new Error("Impossible d'actualiser les actions. Rechargez la page.");
     const nextPlan = await planResponse.json();
     const nextProposals: AgentProposal[] = await proposalResponse.json();
+    const nextRuns: { runs: AgentRunView[] } = await runsResponse.json();
     setPlanItems(nextPlan);
     setProposals(nextProposals);
+    setAgentRuns(nextRuns.runs);
     return nextProposals;
   }
 
@@ -77,24 +83,62 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
     setPlanLoading(true);
     setError(null);
     try {
-      await request("/api/co-ceo/plan", "POST", { companyId: company.id });
+      const { run } = await request("/api/co-ceo/plan", "POST", { requestId: crypto.randomUUID() });
       await refresh();
-      setNotice("Plan mis à jour.");
+      setNotice("Paul prépare le plan en arrière-plan.");
+      void monitorRun(run.id);
     } catch (error) { reportError(error); }
     finally { setPlanLoading(false); }
   }
 
-  async function handleLaunch(item: ActionPlanItem) {
+  async function handleRetryPlanGeneration() {
+    setPlanLoading(true);
+    setError(null);
+    try {
+      const { run } = await request("/api/co-ceo/plan", "POST", { requestId: crypto.randomUUID() });
+      await refresh();
+      setNotice("Paul relance la préparation du plan en arrière-plan.");
+      void monitorRun(run.id);
+    } catch (error) { reportError(error); }
+    finally { setPlanLoading(false); }
+  }
+
+  async function handleLaunch(item: ActionPlanItem, retryRunId?: string) {
     setBusyId(item.id);
     setError(null);
     setNotice(null);
     try {
-      await request(`/api/action-plan/${item.id}/launch`, "POST");
-      const nextProposals = await refresh();
-      const count = nextProposals.filter((proposal) => proposal.planItemId === item.id && needsAttention(proposal, facebookPageName)).length;
-      setNotice(count > 0 ? `${count} production(s) disponible(s) dans À valider.` : "Action traitée. Le diagnostic est à jour, aucune validation nécessaire.");
+      const { run } = await request(`/api/action-plan/${item.id}/launch`, "POST", retryRunId ? { retryRunId } : {});
+      await refresh();
+      setNotice("Action confiée. L'agent travaille en arrière-plan.");
+      void monitorRun(run.id);
     } catch (error) { reportError(error); }
     finally { setBusyId(null); }
+  }
+
+  async function monitorRun(runId: string) {
+    try {
+      const finished = await waitForAgentRun(runId, (run) => {
+        setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 20));
+      });
+      if (!finished) return;
+      await refresh();
+      if (finished.status === "failed") setError(finished.errorMessage ?? "L'agent a échoué. Vous pouvez relancer l'action.");
+      else setNotice(finished.agent === "co_ceo" ? "Le plan de Paul est prêt." : `${finished.resultCount} élément(s) produit(s).`);
+    } catch (error) { reportError(error); }
+  }
+
+  async function checkRun(runId: string) {
+    try {
+      const { run } = await request(`/api/agent-runs/${encodeURIComponent(runId)}`, "GET");
+      setAgentRuns((previous) => [run, ...previous.filter((entry) => entry.id !== run.id)].slice(0, 20));
+      if (run.status === "failed") {
+        await refresh();
+        setError(run.errorMessage ?? "L'agent a échoué. Vous pouvez relancer l'action.");
+      } else if (run.status === "succeeded") {
+        await refresh();
+      }
+    } catch (error) { reportError(error); }
   }
 
   async function handleDiscard(itemId: string) {
@@ -186,6 +230,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
   const validationItems = proposals.filter((proposal) => needsAttention(proposal, facebookPageName) || decidedIds.includes(proposal.id));
   const history = proposals.filter((proposal) => !needsAttention(proposal, facebookPageName));
   const nextItem = activeItems.find((item) => item.status === "propose");
+  const runningItem = activeItems.find((item) => item.status === "en_cours");
   const needsFirstDiagnostic = initialDiagnosticCount === 0 && planItems.length === 0;
   const emptyNextHref = needsFirstDiagnostic ? "/diagnostic" : "/dashboard?view=plan";
   const emptyNextLabel = needsFirstDiagnostic ? "Commencer par le diagnostic" : activeItems.length > 0 ? "Voir les actions du plan" : "Revenir au plan d'action";
@@ -204,7 +249,7 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
         objectiveComplete={Boolean(company.objective?.trim())}
         diagnosticComplete={initialDiagnosticCount > 0}
         planComplete={planItems.length > 0}
-        workStarted={proposals.length > 0 || planItems.some((item) => ["lance", "termine"].includes(item.status))}
+        workStarted={proposals.length > 0 || planItems.some((item) => ["en_cours", "lance", "termine"].includes(item.status))}
         needsValidation={actionable.length > 0}
         resultsAvailable={proposals.some((proposal) => proposal.status === "executee")}
         planLoading={planLoading}
@@ -213,9 +258,11 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
       <section className="mt-6 border-y border-slate-200 py-5" aria-labelledby="next-step">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Prochaine étape</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-4">
-          <h2 id="next-step" className="max-w-xl text-lg font-medium">{actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision` : nextItem ? nextItem.title : needsFirstDiagnostic ? "Repérer les premières opportunités" : "Préparer les prochaines actions"}</h2>
+          <h2 id="next-step" className="max-w-xl text-lg font-medium">{actionable.length > 0 ? `${actionable.length} production(s) attendent votre décision` : nextItem ? nextItem.title : runningItem ? `En cours : ${runningItem.title}` : needsFirstDiagnostic ? "Repérer les premières opportunités" : "Préparer les prochaines actions"}</h2>
           {actionable.length > 0 ? (
             <Link href="/dashboard?view=validation" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white">Examiner les productions</Link>
+          ) : runningItem ? (
+            <span role="status" className="text-sm text-slate-600">L&apos;agent prépare le résultat…</span>
           ) : nextItem ? (
             <button onClick={() => handleLaunch(nextItem)} disabled={locked} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50">{busyId === nextItem.id ? "En préparation…" : "Lancer l'action"}</button>
           ) : needsFirstDiagnostic ? (
@@ -227,6 +274,19 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
       </section>
       {error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+      {agentRuns.some((run) => run.status === "queued" || run.status === "running" || run.status === "failed") && <section className="mt-4 border-b border-slate-200 pb-4" aria-label="Exécutions récentes">
+        <h2 className="text-sm font-medium">Exécutions récentes</h2>
+        <ul className="mt-2 space-y-2 text-sm">
+          {agentRuns.filter((run) => run.status === "queued" || run.status === "running" || run.status === "failed").slice(0, 5).map((run) => (
+            <li key={run.id} className="flex flex-wrap items-center justify-between gap-2">
+              <span>{PERSONAS[run.agent as AgentKey]?.name ?? run.agent}: {run.status === "queued" ? "Dans la file" : run.status === "running" ? "En cours" : run.errorMessage ?? "Échec, relançable"}</span>
+              {run.status === "failed" && run.agent === "co_ceo"
+                ? <button onClick={() => void handleRetryPlanGeneration()} disabled={planLoading} className="text-indigo-600 underline disabled:opacity-50">Relancer Paul</button>
+                : (run.status === "queued" || run.status === "running") && <button onClick={() => void checkRun(run.id)} className="text-indigo-600 underline">Vérifier</button>}
+            </li>
+          ))}
+        </ul>
+      </section>}
       <nav aria-label="Actions" className="mt-6 flex flex-wrap gap-x-6 border-b border-slate-200">
         {([
           ["plan", "Plan d'action", activeItems.length],
@@ -263,10 +323,15 @@ export function DashboardClient({ company, initialPlanItems, initialChatMessages
                       <h3 className="mt-1 font-medium">{item.title}</h3>
                       <details className="mt-2 text-sm text-slate-600"><summary className="cursor-pointer text-xs">Pourquoi cette action ?</summary><p className="mt-2">{item.rationale}</p></details>
                     </div>
-                    {item.status === "propose" ? (
+                    {item.status === "en_cours" ? (
+                      <div className="flex items-center gap-3">
+                        <span role="status" className="text-sm text-slate-600">En cours</span>
+                        {item.agentRuns[0] && <button onClick={() => void checkRun(item.agentRuns[0].id)} className="text-xs text-indigo-600 underline">Vérifier l&apos;état</button>}
+                      </div>
+                    ) : item.status === "propose" ? (
                       <div className="flex items-center gap-3">
                         <button onClick={() => setDiscardingId(discardingId === item.id ? null : item.id)} disabled={locked} className="text-xs text-slate-500 disabled:opacity-50">Écarter</button>
-                        <button onClick={() => void requestProfile(item.agent as AgentKey, () => handleLaunch(item))} disabled={locked || checking} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50">{busyId === item.id ? "En préparation…" : "Lancer"}</button>
+                        <button onClick={() => void requestProfile(item.agent as AgentKey, () => handleLaunch(item, item.agentRuns[0]?.status === "failed" ? item.agentRuns[0].id : undefined))} disabled={locked || checking} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-50">{busyId === item.id ? "Mise en file…" : item.agentRuns[0]?.status === "failed" ? "Relancer" : "Lancer"}</button>
                       </div>
                     ) : (
                       <Link href={count > 0 ? "/dashboard?view=validation" : "/dashboard?view=historique"} className="text-sm text-indigo-600 underline">{count > 0 ? `${count} à examiner` : "Voir la production"}</Link>
