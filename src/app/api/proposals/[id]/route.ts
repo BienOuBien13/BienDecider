@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionCompany } from "@/lib/session";
 import { syncPlanItemStatus } from "@/lib/plan-item-status";
+import { isPublicSource } from "@/lib/proposal-review";
 
 // "brouillon" enregistre une version sans décision ; "validee"/"modifiee"
 // approuvent la version courante (avec ou sans nouveau contenu) ; "rejetee" refuse ;
@@ -27,9 +28,24 @@ export async function PATCH(
   }
 
   const body = await request.json();
-  const { status, content, rejectionReason, expectedVersion } = body as {
-    status: RequestedStatus; content?: unknown; rejectionReason?: unknown; expectedVersion?: unknown;
+  const { status, content, rejectionReason, expectedVersion, leadSource } = body as {
+    status: RequestedStatus; content?: unknown; rejectionReason?: unknown; expectedVersion?: unknown; leadSource?: unknown;
   };
+
+  if (status === undefined && leadSource !== undefined) {
+    if (existing.kind !== "prospect" || typeof leadSource !== "string" || !isPublicSource(leadSource)) {
+      return NextResponse.json({ error: "La source doit être une URL HTTP(S) pour un prospect en attente." }, { status: 400 });
+    }
+    if (existing.status !== "en_attente") {
+      return NextResponse.json({ error: "La source ne peut être corrigée que tant que le prospect attend votre décision." }, { status: 409 });
+    }
+    const { count } = await prisma.lead.updateMany({
+      where: { proposalId: id, companyId: company.id, stage: "propose" },
+      data: { source: leadSource.trim() },
+    });
+    if (count === 0) return NextResponse.json({ error: "Prospect introuvable ou déjà décidé." }, { status: 409 });
+    return NextResponse.json({ proposalId: id, leadSource: leadSource.trim() });
+  }
 
   if (!ALLOWED_STATUSES.includes(status)) {
     return NextResponse.json(
@@ -62,6 +78,12 @@ export async function PATCH(
   }
   if (wasApproved && existing.kind === "prospect") {
     return NextResponse.json({ error: "Ce prospect est déjà dans votre suivi de prospection." }, { status: 409 });
+  }
+  if (existing.kind === "prospect" && status !== "brouillon" && status !== "rejetee" && status !== "a_relire") {
+    const lead = await prisma.lead.findUnique({ where: { proposalId: id }, select: { source: true } });
+    if (!isPublicSource(lead?.source)) {
+      return NextResponse.json({ error: "Ajoutez une URL publique de source valide avant d'ajouter ce prospect au suivi." }, { status: 409 });
+    }
   }
 
   const newContent = changesContent ? (content as string).trim() : existing.content;

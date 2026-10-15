@@ -293,7 +293,7 @@ test("a draft is saved without approval, then a precise version is approved with
     await page.unroute(`**/api/proposals/${proposal.id}`);
 
     await card.getByRole("button", { name: "Approuver cette version", exact: true }).click();
-    await expect(card.getByText("À publier manuellement", { exact: true })).toBeVisible();
+    await expect(card.getByText(/^Valider ajoute ce prospect à votre suivi de prospection\./)).toBeVisible();
     saved = await prisma.agentProposal.findUniqueOrThrow({ where: { id: proposal.id } });
     expect(saved).toMatchObject({ content: finalContent, version: 3, approvedVersion: 3, status: "modifiee" });
     expect(saved.approvedAt).not.toBeNull();
@@ -336,6 +336,78 @@ test("a site is published only from its approved version", async ({ page, compan
       expect(await prisma.executionLog.count({ where: { proposalId: id } })).toBe(0);
     }
     expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).siteHtml).toBeNull();
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("critical content checks cannot be bypassed by a generic publish confirmation", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    await prisma.company.update({ where: { id: company.id }, data: { certifications: null } });
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Certification à vérifier", content: "Entreprise certifiée RGE.", status: "validee", approvedVersion: 1,
+    } });
+    const execute = (data: unknown) => page.request.post(`${baseURL}/api/proposals/${proposal.id}/execute`, { headers: { Origin: baseURL }, data });
+    const genericConfirmation = await execute({ expectedVersion: 1, confirmed: true });
+    expect(genericConfirmation.status()).toBe(409);
+    expect((await genericConfirmation.json()).error).toContain("Certification non étayée");
+    const forgedAcknowledgement = await execute({ expectedVersion: 1, confirmed: true, acknowledgedReviewIds: ["certification_unsupported"] });
+    expect(forgedAcknowledgement.status()).toBe(409);
+    expect(await prisma.executionLog.count({ where: { proposalId: proposal.id } })).toBe(0);
+    expect((await prisma.company.findUniqueOrThrow({ where: { id: company.id } })).siteHtml).toBeNull();
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("publication sends human review acknowledgements for the approved content version", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Tarifs à confirmer", content: "Nos tarifs sont attractifs.", status: "validee", approvedVersion: 1,
+    } });
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const card = page.locator("article").filter({ hasText: proposal.title });
+    await expect(card.getByText("Prix évoqué sans montant vérifiable", { exact: true })).toBeVisible();
+    await card.getByRole("button", { name: "Publier le site" }).click();
+    const confirm = card.getByRole("button", { name: "Confirmer la mise en ligne" });
+    await expect(confirm).toBeDisabled();
+    await card.getByRole("checkbox", { name: /J'ai vérifié ce point pour cette version/ }).check();
+    await expect(confirm).toBeEnabled();
+    await page.route(`**/api/proposals/${proposal.id}/execute`, async (route) => {
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: 1, confirmed: true, acknowledgedReviewIds: ["price_not_specified"] });
+      await route.fulfill({ json: { url: "/site/test" } });
+    });
+    await confirm.click();
+  } finally {
+    await prisma.$disconnect();
+  }
+});
+
+test("a prospect without a public source cannot be added to the follow-up funnel", async ({ page, company }) => {
+  const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+  try {
+    const proposal = await prisma.agentProposal.create({ data: {
+      companyId: company.id, agent: "demarchage", kind: "prospect", title: "Association locale", content: "Organisation à vérifier.",
+    } });
+    const lead = await prisma.lead.create({ data: {
+      companyId: company.id, proposalId: proposal.id, name: proposal.title, reason: "Correspond au segment", source: null,
+    } });
+    const decide = (data: unknown) => page.request.patch(`${baseURL}/api/proposals/${proposal.id}`, { data });
+    const missingSource = await decide({ status: "validee", expectedVersion: 1 });
+    expect(missingSource.status()).toBe(409);
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("propose");
+    expect((await page.request.patch(`${baseURL}/api/proposals/${proposal.id}`, { data: { leadSource: "http://localhost/private" } })).status()).toBe(400);
+    await page.goto(`${baseURL}/dashboard?view=validation`);
+    const card = page.locator("article").filter({ hasText: proposal.title });
+    await expect(card.getByLabel("URL de la source")).toBeVisible();
+    await card.getByLabel("URL de la source").fill("https://example.org/association");
+    await card.getByRole("button", { name: "Enregistrer la source" }).click();
+    await expect(card.getByLabel("URL de la source")).toHaveValue("https://example.org/association");
+    await card.getByRole("button", { name: "Valider", exact: true }).click();
+    await expect(card.getByText("À publier manuellement", { exact: true })).toBeVisible();
+    expect((await prisma.lead.findUniqueOrThrow({ where: { id: lead.id } })).stage).toBe("a_contacter");
   } finally {
     await prisma.$disconnect();
   }

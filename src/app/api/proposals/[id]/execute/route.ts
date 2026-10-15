@@ -7,6 +7,7 @@ import { publishProposalToFacebook } from "@/lib/social/facebook-publish";
 import { getConfiguredRiskLevels } from "@/lib/delegation-policy";
 import { AgentRunQuotaError } from "@/lib/agent-runs";
 import { syncPlanItemStatus } from "@/lib/plan-item-status";
+import { decideProposalReview, reviewProposal } from "@/lib/proposal-review";
 
 export const maxDuration = 60;
 
@@ -38,11 +39,32 @@ export async function POST(
   const body = await _request.json().catch(() => null);
   const expectedVersion = body && typeof body === "object" ? (body as { expectedVersion?: unknown }).expectedVersion : undefined;
   const confirmed = body && typeof body === "object" ? (body as { confirmed?: unknown }).confirmed : undefined;
+  const acknowledgedReviewIds = body && typeof body === "object" ? (body as { acknowledgedReviewIds?: unknown }).acknowledgedReviewIds : undefined;
   if (confirmed !== true) {
     return NextResponse.json({ error: "Confirmez explicitement la destination et la mise en ligne." }, { status: 400 });
   }
   if (!Number.isInteger(expectedVersion)) {
     return NextResponse.json({ error: "La version à publier est obligatoire." }, { status: 400 });
+  }
+
+  if (proposal.kind === "social_post" || proposal.kind === "site_web_content") {
+    const profile = await prisma.company.findUnique({ where: { id: company.id }, select: { phone: true, certifications: true } });
+    const reviewPoints = reviewProposal({
+      kind: proposal.kind,
+      content: proposal.content,
+      companyPhone: profile?.phone,
+      companyCertifications: profile?.certifications,
+    });
+    const acknowledgementIds = Array.isArray(acknowledgedReviewIds) && acknowledgedReviewIds.every((value) => typeof value === "string")
+      ? acknowledgedReviewIds as string[]
+      : [];
+    const review = decideProposalReview(reviewPoints, acknowledgementIds);
+    if (review.blockers.length > 0) {
+      return NextResponse.json({ error: `Publication bloquée : ${review.blockers.map((point) => point.title).join(" ; ")}.` }, { status: 409 });
+    }
+    if (review.missingAcknowledgements.length > 0) {
+      return NextResponse.json({ error: `Confirmez les vérifications humaines de cette version : ${review.missingAcknowledgements.map((point) => point.title).join(" ; ")}.` }, { status: 409 });
+    }
   }
 
   try {
@@ -52,7 +74,7 @@ export async function POST(
       if (proposal.planItemId) await syncPlanItemStatus(proposal.planItemId);
       return NextResponse.json({ message });
     }
-    const { slug } = await publishSiteFromProposal(id, expectedVersion as number);
+    const { slug } = await publishSiteFromProposal(id, expectedVersion as number, acknowledgementIds);
     if (proposal.planItemId) await syncPlanItemStatus(proposal.planItemId);
     return NextResponse.json({ url: `/site/${slug}`, message: "Site publié. La publication figure dans les résultats." });
   } catch (error) {
