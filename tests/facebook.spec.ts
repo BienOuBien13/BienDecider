@@ -201,7 +201,9 @@ test("Facebook routes: start, refused or forged callbacks, Page choice guards an
   const company = await prisma.company.create({ data: { ...profile, ownerEmail: `facebook-test-${randomUUID()}@example.invalid` } });
   const other = await prisma.company.create({ data: { ...profile, ownerEmail: `facebook-other-${randomUUID()}@example.invalid` } });
   const session = (email: string, sessionVersion: number) => createSessionToken(email, sessionVersion, process.env.SESSION_SECRET!);
-  const headers = { Cookie: `pepito_session=${session(company.ownerEmail, company.sessionVersion)}`, Origin: baseURL };
+  // Le jeton contient l'heure d'émission à la seconde : on réutilise le même pour vérifier le state.
+  const companySession = session(company.ownerEmail, company.sessionVersion);
+  const headers = { Cookie: `pepito_session=${companySession}`, Origin: baseURL };
   const redirectUri = `${baseURL}${META_CALLBACK}`;
   const connection = () => prisma.channelConnection.findUnique({ where: { companyId_channel: { companyId: company.id, channel: "facebook" } } });
   try {
@@ -216,7 +218,7 @@ test("Facebook routes: start, refused or forged callbacks, Page choice guards an
     expect(setCookie).toContain(`${META_STATE_COOKIE}=`);
     expect(setCookie).toMatch(/HttpOnly/i);
     expect(setCookie).toContain("Path=/api/oauth/meta");
-    expect(verifyMetaState(state, { companyId: company.id, session: session(company.ownerEmail, company.sessionVersion), redirectUri })).toBe(true);
+    expect(verifyMetaState(state, { companyId: company.id, session: companySession, redirectUri })).toBe(true);
     expect((await request.get(`${baseURL}/api/oauth/meta/start`, { headers: { ...headers, "Sec-Fetch-Site": "cross-site" }, maxRedirects: 0 })).status()).toBe(403);
 
     // Retour : une connexion existante n'est jamais modifiée par un refus ou un state invalide.
