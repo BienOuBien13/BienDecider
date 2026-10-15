@@ -331,7 +331,7 @@ test("a site is published only from its approved version", async ({ page, compan
       companyId: company.id, agent: "contenu", kind: "site_web_content", title: "Site modifié après aperçu", content: "Brief v2", status: "modifiee", version: 2, approvedVersion: 2,
     } });
     expect((await execute(changed.id)).status()).toBe(400);
-    expect((await execute(changed.id, { expectedVersion: 1 })).status()).toBe(409);
+    expect((await execute(changed.id, { expectedVersion: 1, confirmed: true })).status()).toBe(409);
     for (const id of [legacy.id, changed.id]) {
       expect(await prisma.executionLog.count({ where: { proposalId: id } })).toBe(0);
     }
@@ -392,6 +392,7 @@ test("single validation queue, persistent decisions, publishing and error recove
     await expect(page.getByRole("link", { name: "À valider 1", exact: true })).toBeVisible();
     const site = await prisma.agentProposal.findFirstOrThrow({ where: { companyId: company.id, kind: "site_web_content" } });
     await page.route(`**/api/proposals/${site.id}/execute`, async (route) => {
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: site.version, confirmed: true });
       await prisma.agentProposal.update({ where: { id: site.id }, data: { status: "executee" } });
       await route.fulfill({ json: { url: "/site/test" } });
     });

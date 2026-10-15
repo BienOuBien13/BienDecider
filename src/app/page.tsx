@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
 import { PersonaAvatar } from "@/components/persona-avatar";
 import { getSessionEmail } from "@/lib/session";
+import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
 
 const TEAM: AgentKey[] = ["co_ceo", "marketing", "contenu", "demarchage"];
 
@@ -17,23 +18,23 @@ const EXAMPLE_PLAN = [
 const CAPABILITIES = [
   {
     deliverable: "Diagnostic et plan d'action",
-    us: "Analyse votre présence en ligne et vos concurrents, puis propose 3 à 5 actions.",
-    you: "Vous choisissez les actions à lancer.",
+    us: "L'équipe analyse votre présence en ligne et Paul propose des priorités.",
+    you: "Vous choisissez les activités à confier aux agents.",
   },
   {
-    deliverable: "Site vitrine",
-    us: "Rédige votre site et le publie à votre nom.",
-    you: "Vous le relisez et décidez de sa mise en ligne.",
+    deliverable: CHANNEL_CAPABILITIES.site.label,
+    us: "BienDecider prépare le contenu et peut mettre le site en ligne.",
+    you: CHANNEL_CAPABILITIES.site.nextStep,
   },
   {
     deliverable: "Publications sur les réseaux",
-    us: "Rédige vos posts Facebook, Instagram, LinkedIn et Google, puis les publie pour vous.",
-    you: "Vous relisez et décidez de ce qui part.",
+    us: "L'équipe prépare vos textes. La publication Facebook est disponible sur une Page reliée et vérifiée.",
+    you: "Pour les autres réseaux, vous copiez le texte et le publiez vous-même. Instagram, LinkedIn et Google ne sont pas publiés par BienDecider.",
   },
   {
-    deliverable: "Prospection",
-    us: "Repère des prospects, prépare le message d'approche et l'envoie pour vous.",
-    you: "Vous validez chaque envoi.",
+    deliverable: CHANNEL_CAPABILITIES.prospecting.label,
+    us: "Jean-Claude prépare des pistes et des modèles de message, sans envoyer de prospection.",
+    you: "Vous vérifiez la source, choisissez qui contacter et envoyez vous-même le message.",
   },
 ];
 
@@ -41,7 +42,7 @@ const STEPS = [
   { n: "1", title: "Vous donnez l'objectif", text: "« 10 demandes de devis par mois ». Votre métier, votre zone, votre site s'il existe. Environ 5 minutes." },
   { n: "2", title: "Paul fait le plan", text: "Votre partenaire de croissance analyse votre situation et propose quelques actions, confiées à son équipe." },
   { n: "3", title: "L'équipe prépare", text: "Site, posts, prospection : chaque agent prépare le travail concret." },
-  { n: "4", title: "Vous relisez et décidez", text: "Rien ne part sans votre accord. Une fois votre décision prise, BienDecider publie ou envoie pour vous." },
+  { n: "4", title: "Vous relisez et décidez", text: "Le site et les publications Facebook peuvent être mis en ligne après approbation et confirmation. Pour les autres canaux, vous copiez et publiez vous-même. Gmail envoie uniquement le message que vous avez confirmé." },
 ];
 
 // Une seule vérification par requête, partagée par l'en-tête et le bloc principal.
@@ -165,7 +166,7 @@ export default function LandingPage() {
                   <li>la gratuité du devis</li>
                 </ul>
                 <p className="mt-3 text-sm text-slate-600">
-                  Vous modifiez si besoin, puis vous approuvez cette version : Camille la publie alors sur votre Page.
+                  Vous approuvez le texte, puis confirmez sa publication sur la Page Facebook choisie.
                 </p>
               </div>
             </div>
@@ -221,8 +222,7 @@ export default function LandingPage() {
         </section>
 
         <p className="mt-12 text-sm text-slate-600">
-          Aucune action n&apos;est exécutée sans votre validation. Vos accès Google et Meta passent par leurs connexions
-          officielles : vous ne saisissez jamais leur mot de passe chez nous.{" "}
+          Une connexion à un compte ne confie pas une activité et ne déclenche pas de publication. Chaque envoi ou mise en ligne disponible demande votre confirmation. Vous ne saisissez jamais le mot de passe de vos comptes fournisseurs chez nous.{" "}
           <Link href="/confidentialite" className="font-medium text-slate-800 underline">
             Comment vos données sont traitées
           </Link>

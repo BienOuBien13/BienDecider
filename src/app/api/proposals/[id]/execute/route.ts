@@ -36,6 +36,10 @@ export async function POST(
   // Confirmer l'exécution d'une version précise : une ancienne page ouverte ne peut pas publier une version remplacée.
   const body = await _request.json().catch(() => null);
   const expectedVersion = body && typeof body === "object" ? (body as { expectedVersion?: unknown }).expectedVersion : undefined;
+  const confirmed = body && typeof body === "object" ? (body as { confirmed?: unknown }).confirmed : undefined;
+  if (confirmed !== true) {
+    return NextResponse.json({ error: "Confirmez explicitement la destination et la mise en ligne." }, { status: 400 });
+  }
   if (!Number.isInteger(expectedVersion)) {
     return NextResponse.json({ error: "La version à publier est obligatoire." }, { status: 400 });
   }

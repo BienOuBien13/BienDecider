@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { AgentRunView } from "@/lib/agent-run-types";
 import { waitForAgentRun } from "@/lib/agent-runs-client";
 import { PERSONAS, type AgentKey } from "@/lib/agents/personas";
+import { CHANNEL_CAPABILITIES } from "@/lib/channel-capabilities";
 import { PersonaAvatar } from "@/components/persona-avatar";
 import { useAgentProfileCompletion } from "@/components/agent-profile-completion";
 
@@ -90,6 +91,13 @@ export function EquipeClient({ initialAgentRuns }: { initialAgentRuns: AgentRunV
       <div className="mt-6 divide-y divide-slate-200 border-t border-slate-200">
         {(["co_ceo", "marketing", "contenu", "demarchage"] as AgentKey[]).map((key) => {
           const persona = PERSONAS[key];
+          const nextStep = key === "co_ceo"
+            ? "Paul propose les priorités ; vous choisissez les activités à confier."
+            : key === "marketing"
+              ? `${CHANNEL_CAPABILITIES.googleBusiness.label} : ${CHANNEL_CAPABILITIES.googleBusiness.availability}`
+              : key === "contenu"
+                ? "Le site et Facebook peuvent être mis en ligne après votre approbation et une confirmation. Pour les autres réseaux, vous copiez et publiez vous-même."
+                : CHANNEL_CAPABILITIES.prospecting.nextStep;
           return (
             <section key={key} className="py-6">
               <div className="flex items-start gap-3">
@@ -98,6 +106,7 @@ export function EquipeClient({ initialAgentRuns }: { initialAgentRuns: AgentRunV
                   <h2 className="text-lg font-medium">{persona.name}</h2>
                   <p className="text-sm text-slate-600">{persona.role}</p>
                   <p className="mt-1 text-sm text-slate-500">{persona.blurb}</p>
+                  <p className="mt-2 text-sm text-slate-700">{nextStep}</p>
                 </div>
               </div>
               {key === "co_ceo" ? (

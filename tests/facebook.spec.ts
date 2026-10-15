@@ -391,7 +391,7 @@ test("the dashboard names the Page and asks for an explicit confirmation before 
     let executed = 0;
     await page.route(`**/api/proposals/${proposal.id}/execute`, async (route) => {
       executed += 1;
-      expect(route.request().postDataJSON()).toEqual({ expectedVersion: 1 });
+      expect(route.request().postDataJSON()).toEqual({ expectedVersion: 1, confirmed: true });
       await prisma.agentProposal.update({ where: { id: proposal.id }, data: { status: "executee" } });
       await route.fulfill({ json: { message: "Publication mise en ligne sur la Page Facebook « Atelier Test · Page principale »." } });
     });
