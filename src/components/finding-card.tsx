@@ -31,7 +31,7 @@ export function FindingCard({ finding }: { finding: AuditFinding }) {
         onClick={() => dialogRef.current?.showModal()}
         className="w-full rounded-lg border border-slate-200 p-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50/30"
       >
-        <span className="text-xs uppercase text-slate-400">{CATEGORY_LABELS[finding.category] ?? finding.category}</span>
+        <span className="text-xs uppercase text-slate-600">{CATEGORY_LABELS[finding.category] ?? finding.category}</span>
         <h3 className="font-medium">{finding.title}</h3>
         <p className="mt-1 line-clamp-2 text-sm text-slate-600">{finding.content}</p>
         <span className="mt-1 inline-block text-xs text-indigo-600">Voir le détail →</span>
@@ -40,10 +40,10 @@ export function FindingCard({ finding }: { finding: AuditFinding }) {
       <dialog ref={dialogRef} aria-labelledby={titleId} className="fixed inset-0 m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-lg bg-white p-5 text-slate-900 shadow-xl backdrop:bg-black/40">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-xs uppercase text-slate-400">{CATEGORY_LABELS[finding.category] ?? finding.category}</span>
+                <span className="text-xs uppercase text-slate-600">{CATEGORY_LABELS[finding.category] ?? finding.category}</span>
                 <h2 id={titleId} className="text-lg font-semibold">{finding.title}</h2>
               </div>
-              <button onClick={() => dialogRef.current?.close()} className="shrink-0 text-sm text-slate-500 hover:text-slate-900">
+              <button onClick={() => dialogRef.current?.close()} className="min-h-11 shrink-0 px-2 text-sm text-slate-700 hover:text-slate-900">
                 Fermer
               </button>
             </div>
@@ -104,7 +104,7 @@ function ActionItemRow({ item }: { item: FindingActionItem }) {
     <li className="border-t border-slate-200 py-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="text-xs text-slate-400">{persona?.name ?? item.agent}</p>
+          <p className="text-xs text-slate-600">{persona?.name ?? item.agent}</p>
           <p className="text-sm font-medium">{item.title}</p>
           <p className="mt-0.5 text-xs text-slate-500">{item.rationale}</p>
         </div>
