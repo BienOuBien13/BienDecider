@@ -10,5 +10,15 @@ export function getDatabaseUrl(): string {
     );
   }
 
-  return databaseUrl;
+  try {
+    const url = new URL(databaseUrl);
+    const sslMode = url.searchParams.get("sslmode")?.toLowerCase();
+    const usesLibpqCompatibility = url.searchParams.get("uselibpqcompat")?.toLowerCase() === "true";
+    if (!usesLibpqCompatibility && ["prefer", "require", "verify-ca"].includes(sslMode ?? "")) {
+      url.searchParams.set("sslmode", "verify-full");
+    }
+    return url.toString();
+  } catch {
+    return databaseUrl;
+  }
 }
