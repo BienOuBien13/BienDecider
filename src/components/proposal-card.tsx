@@ -121,7 +121,7 @@ export function ProposalCard({
   }
 
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4">
+    <article id={`proposal-${proposal.id}`} tabIndex={-1} className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
         <span className="text-slate-600">
           {showAgent && persona ? `${persona.name} · ` : ""}

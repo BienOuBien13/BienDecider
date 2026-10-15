@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PersonaAvatar } from "@/components/persona-avatar";
 import { PERSONAS } from "@/lib/agents/personas";
 import { describePage, PAUL_ELEMENT_LABELS, PAUL_OPEN_EVENT, type PaulElement } from "@/lib/paul-context";
+import type { PaulReference } from "@/lib/paul-references";
 
 type PanelState = { open: boolean; draft: string };
-type ChatEntry = { id: string; role: string; content: string; createdAt: string };
+type ChatEntry = { id: string; role: string; content: string; createdAt: string; references?: PaulReference[] };
 
 const STORAGE_KEY = "paul-panel";
 const CLOSED: PanelState = { open: false, draft: "" };
@@ -39,6 +41,16 @@ function subscribePanel(listener: () => void) {
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function renderLinkedMessage(content: string, references: PaulReference[] = []) {
+  const byMarker = new Map(references.map((reference) => [reference.marker, reference]));
+  return content.split(/(\[\[bd:(?:proposal|finding|lead):[A-Za-z0-9_-]{1,100}\]\])/g).map((part, index) => {
+    const reference = byMarker.get(part);
+    return reference
+      ? <Link key={`${reference.marker}-${index}`} href={reference.href} className="font-medium text-indigo-700 underline underline-offset-2">{reference.label}</Link>
+      : part;
+  });
 }
 
 export function PaulPanel() {
@@ -100,11 +112,12 @@ export function PaulPanel() {
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.error ?? "Paul n'a pas pu répondre. Votre message est conservé : réessayez.");
       const now = new Date().toISOString();
+      const references: PaulReference[] = Array.isArray(data.references) ? data.references : [];
       writePanel({ draft: "" });
       setMessages((previous) => [
         ...previous,
         { id: `local-${now}-u`, role: "user", content: text, createdAt: now },
-        { id: `local-${now}-a`, role: "assistant", content: data.reply, createdAt: now },
+        { id: `local-${now}-a`, role: "assistant", content: data.reply, references, createdAt: now },
       ]);
       router.refresh();
     } catch (sendError) {
@@ -144,7 +157,7 @@ export function PaulPanel() {
             {messages.map((message) => (
               <p key={message.id} className={`whitespace-pre-wrap break-words text-sm ${message.role === "user" ? "text-indigo-900" : "text-slate-700"}`}>
                 <span className="block text-xs font-medium text-slate-600">{message.role === "user" ? "Vous" : persona.name} · {formatDate(message.createdAt)}</span>
-                {message.content}
+                {renderLinkedMessage(message.content, message.references)}
               </p>
             ))}
             {sending && <p className="text-sm text-slate-600">{persona.name} réfléchit…</p>}

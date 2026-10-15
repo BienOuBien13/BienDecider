@@ -28,9 +28,10 @@ export function FindingCard({ finding }: { finding: AuditFinding }) {
   return (
     <>
       <button
+        id={`finding-${finding.id}`}
         type="button"
         onClick={() => dialogRef.current?.showModal()}
-        className="w-full rounded-lg border border-slate-200 p-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50/30"
+        className="scroll-mt-24 w-full rounded-lg border border-slate-200 p-3 text-left transition hover:border-indigo-300 hover:bg-indigo-50/30"
       >
         <span className="text-xs uppercase text-slate-600">{CATEGORY_LABELS[finding.category] ?? finding.category}</span>
         <h3 className="font-medium">{finding.title}</h3>

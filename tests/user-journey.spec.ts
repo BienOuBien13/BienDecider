@@ -792,10 +792,19 @@ test("Paul is reachable from any page, keeps the conversation and the draft, and
       { companyId: company.id, role: "assistant", content: "Bonjour, que puis-je faire ?", createdAt: new Date(Date.now() - 30_000) },
     ] });
     const proposal = await prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post du lundi", content: "Texte du post" } });
+    const finding = await prisma.auditFinding.create({ data: { companyId: company.id, category: "site_web", title: "Constat mobile", content: "Résumé du constat" } });
+    const lead = await prisma.lead.create({ data: { companyId: company.id, name: "Association suivie", reason: "Cible locale", stage: "a_contacter" } });
     const sent: Array<{ message: string; context: { path: string; view?: string; element?: { type: string; id: string } } }> = [];
     await page.route("**/api/co-ceo/message", async (route) => {
       sent.push(route.request().postDataJSON());
-      await route.fulfill({ json: { reply: "Voici l'explication." } });
+      await route.fulfill({ json: {
+        reply: `Voici l'explication. [[bd:proposal:${proposal.id}]] [[bd:finding:${finding.id}]] [[bd:lead:${lead.id}]]`,
+        references: [
+          { marker: `[[bd:proposal:${proposal.id}]]`, type: "proposal", id: proposal.id, label: "Post du lundi", href: `/dashboard?proposal=${proposal.id}#proposal-${proposal.id}` },
+          { marker: `[[bd:finding:${finding.id}]]`, type: "finding", id: finding.id, label: "Constat mobile", href: `/diagnostic#finding-${finding.id}` },
+          { marker: `[[bd:lead:${lead.id}]]`, type: "lead", id: lead.id, label: "Association suivie", href: `/prospection#lead-${lead.id}` },
+        ],
+      } });
     });
 
     await page.goto(`${baseURL}/dashboard?view=validation`);
@@ -811,6 +820,13 @@ test("Paul is reachable from any page, keeps the conversation and the draft, and
     await panel.getByLabel("Message à Paul").fill("Explique-moi ça");
     await panel.getByRole("button", { name: "Envoyer" }).click();
     await expect(panel.getByText("Voici l'explication.")).toBeVisible();
+    const proposalLink = panel.getByRole("link", { name: "Post du lundi" });
+    await expect(proposalLink).toHaveAttribute("href", `/dashboard?proposal=${proposal.id}#proposal-${proposal.id}`);
+    await expect(panel.getByRole("link", { name: "Constat mobile" })).toHaveAttribute("href", `/diagnostic#finding-${finding.id}`);
+    await expect(panel.getByRole("link", { name: "Association suivie" })).toHaveAttribute("href", `/prospection#lead-${lead.id}`);
+    await proposalLink.click();
+    await expect(page).toHaveURL(new RegExp(`proposal=${proposal.id}`));
+    await expect(panel).toBeVisible();
     expect(sent).toHaveLength(1);
     expect(sent[0].message).toBe("Explique-moi ça");
     expect(sent[0].context).toEqual({ path: "/dashboard", view: "validation", element: { type: "proposal", id: proposal.id } });

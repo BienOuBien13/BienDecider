@@ -252,6 +252,47 @@ test("the page context reads an element only from the signed-in company and neve
   }
 });
 
+test("Paul references resolve only available objects owned by the signed-in company", async ({ company }) => {
+  const { prisma } = await import("../src/lib/prisma");
+  const { resolvePaulReferences } = await import("../src/lib/paul-references");
+  const other = await prisma.company.create({ data: {
+    ownerEmail: `references-other-${randomUUID()}@example.invalid`, name: "Autre entreprise", trade: "Artisan", servingArea: "Lyon",
+  } });
+  try {
+    const [proposal, foreignProposal, finding, foreignFinding, lead, pendingLead, discardedLead] = await Promise.all([
+      prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Mon post", content: "Texte" } }),
+      prisma.agentProposal.create({ data: { companyId: other.id, agent: "contenu", kind: "social_post", title: "Post voisin", content: "Secret" } }),
+      prisma.auditFinding.create({ data: { companyId: company.id, category: "site_web", title: "Mon constat", content: "Résumé" } }),
+      prisma.auditFinding.create({ data: { companyId: other.id, category: "site_web", title: "Constat voisin", content: "Secret" } }),
+      prisma.lead.create({ data: { companyId: company.id, name: "Association suivie", reason: "Cible locale", stage: "a_contacter" } }),
+      prisma.lead.create({ data: { companyId: company.id, name: "Prospect en attente", reason: "Cible locale", stage: "propose" } }),
+      prisma.lead.create({ data: { companyId: company.id, name: "Prospect écarté", reason: "Cible locale", stage: "ecarte", statusReason: "Hors zone" } }),
+    ]);
+    const content = [
+      `[[bd:proposal:${proposal.id}]]`, `[[bd:proposal:${foreignProposal.id}]]`,
+      `[[bd:finding:${finding.id}]]`, `[[bd:finding:${foreignFinding.id}]]`,
+      `[[bd:lead:${lead.id}]]`, `[[bd:lead:${pendingLead.id}]]`, `[[bd:lead:${discardedLead.id}]]`,
+    ].join(" ");
+    const [resolved] = await resolvePaulReferences(company.id, [content]);
+
+    expect(resolved.references.map((reference) => `${reference.type}:${reference.id}`)).toEqual([
+      `proposal:${proposal.id}`, `finding:${finding.id}`, `lead:${lead.id}`,
+    ]);
+    expect(resolved.content).toContain(`[[bd:proposal:${proposal.id}]]`);
+    expect(resolved.content).not.toContain(foreignProposal.id);
+    expect(resolved.content).not.toContain(foreignFinding.id);
+    expect(resolved.content).not.toContain(pendingLead.id);
+    expect(resolved.content).not.toContain(discardedLead.id);
+    expect(resolved.references.map((reference) => reference.href)).toEqual([
+      `/dashboard?proposal=${proposal.id}#proposal-${proposal.id}`,
+      `/diagnostic#finding-${finding.id}`,
+      `/prospection#lead-${lead.id}`,
+    ]);
+  } finally {
+    await prisma.company.delete({ where: { id: other.id } });
+  }
+});
+
 test("Camille gets the diagnosis detail and Jean-Claude the competition findings", async ({ company }) => {
   const { prisma } = await import("../src/lib/prisma");
   const { getFindingsContextForContent, getCompetitionContextForProspecting } = await import("../src/lib/agents/findings-context");

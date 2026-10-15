@@ -79,7 +79,7 @@ export function LeadCard({ lead, now, busy, companyName, trade, phone, onPatch }
   }
 
   return (
-    <div className="text-sm">
+    <div id={`lead-${lead.id}`} tabIndex={-1} className="scroll-mt-24 text-sm">
       <p className="font-medium">{lead.name}</p>
       <p className="mt-0.5 text-slate-600">{lead.reason}</p>
       <p className="mt-1 text-xs text-slate-600">
