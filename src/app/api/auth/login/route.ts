@@ -1,10 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { setSessionEmail } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { consumeIpAttempt, refundIpAttempt } from "@/lib/auth-throttle";
 
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
+
+/** Incrément atomique ; un verrou expiré repart de zéro au lieu de reverrouiller au premier échec. */
+async function recordFailedAttempt(companyId: string): Promise<number> {
+  const now = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
+  const base = Prisma.sql`(CASE WHEN "lockedUntil" <= ${now} THEN 0 ELSE "failedLoginAttempts" END)`;
+  const rows = await prisma.$queryRaw<{ failedLoginAttempts: number }[]>`
+    UPDATE "Company" SET
+      "failedLoginAttempts" = ${base} + 1,
+      "lockedUntil" = CASE
+        WHEN ${base} + 1 >= ${MAX_ATTEMPTS} THEN ${now} + (${LOCK_DURATION_MS / 1000}::int * interval '1 second')
+        WHEN "lockedUntil" <= ${now} THEN NULL
+        ELSE "lockedUntil" END
+    WHERE "id" = ${companyId}
+    RETURNING "failedLoginAttempts"`;
+  return rows[0].failedLoginAttempts;
+}
 
 /**
  * Connexion par email + mot de passe. L'inscription est un flux séparé : une
@@ -14,7 +32,9 @@ const LOCK_DURATION_MS = 15 * 60 * 1000;
  *
  * Anti-force-brute (cf. docs/backlog.md, point P0) : 5 échecs consécutifs
  * verrouillent le compte 15 minutes. Stocké en base (pas en mémoire) pour
- * rester valable entre plusieurs instances serverless.
+ * rester valable entre plusieurs instances serverless. Une limite par adresse IP
+ * (src/lib/auth-throttle.ts) empêche en plus un tiers de verrouiller des comptes
+ * ou d'énumérer des emails en masse ; seuls les échecs comptent contre l'IP.
  */
 export async function POST(request: NextRequest) {
   let body: { email?: unknown; password?: unknown };
@@ -31,6 +51,14 @@ export async function POST(request: NextRequest) {
   }
   if (!password || typeof password !== "string" || password.length < 6) {
     return NextResponse.json({ error: "Mot de passe requis (6 caractères minimum)" }, { status: 400 });
+  }
+
+  const ipAttempt = await consumeIpAttempt(request, "login");
+  if (ipAttempt?.limited) {
+    return NextResponse.json(
+      { error: "Trop de tentatives depuis cette connexion. Réessayez plus tard." },
+      { status: 429, headers: { "Retry-After": String(ipAttempt.retryAfterSeconds) } },
+    );
   }
 
   let company = await prisma.company.findUnique({ where: { ownerEmail: email } });
@@ -56,14 +84,7 @@ export async function POST(request: NextRequest) {
       data: { passwordHash: await hashPassword(password), sessionVersion: { increment: 1 } },
     });
   } else if (!(await verifyPassword(password, company.passwordHash))) {
-    const attempts = company.failedLoginAttempts + 1;
-    await prisma.company.update({
-      where: { id: company.id },
-      data: {
-        failedLoginAttempts: attempts,
-        lockedUntil: attempts >= MAX_ATTEMPTS ? new Date(Date.now() + LOCK_DURATION_MS) : undefined,
-      },
-    });
+    const attempts = await recordFailedAttempt(company.id);
     const remaining = MAX_ATTEMPTS - attempts;
     return NextResponse.json(
       {
@@ -76,6 +97,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  await refundIpAttempt(ipAttempt);
   await setSessionEmail(email);
   company = await prisma.company.update({
     where: { id: company.id },

@@ -1,0 +1,58 @@
+import { createHmac } from "node:crypto";
+import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+
+export type ThrottleScope = "login" | "signup";
+
+const POLICY: Record<ThrottleScope, { limit: number; windowSeconds: number }> = {
+  login: { limit: 20, windowSeconds: 15 * 60 },
+  signup: { limit: 10, windowSeconds: 60 * 60 },
+};
+
+export type ThrottleResult = { key: string; limited: false } | { key: string; limited: true; retryAfterSeconds: number } | null;
+
+/** Adresse IP posée par la plateforme (Vercel écrase x-real-ip) ; null si absente, la limite par IP est alors ignorée. */
+function clientIp(request: Request): string | null {
+  const real = request.headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",").pop()?.trim();
+  return forwarded || null;
+}
+
+function throttleKey(scope: ThrottleScope, ip: string): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) throw new Error("SESSION_SECRET manquant dans l'environnement.");
+  return `${scope}:${createHmac("sha256", secret).update(ip).digest("hex")}`;
+}
+
+/**
+ * Consomme une tentative pour l'IP de la requête, de façon atomique (un seul UPSERT).
+ * Retourne null quand aucune IP n'est disponible.
+ */
+export async function consumeIpAttempt(request: Request, scope: ThrottleScope): Promise<ThrottleResult> {
+  const ip = clientIp(request);
+  if (!ip) return null;
+  const { limit, windowSeconds } = POLICY[scope];
+  const key = throttleKey(scope, ip);
+  const utcNow = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
+  const expired = Prisma.sql`"AuthThrottle"."windowStart" <= ${utcNow} - (${windowSeconds}::int * interval '1 second')`;
+  const rows = await prisma.$queryRaw<{ count: number; elapsed: number }[]>`
+    INSERT INTO "AuthThrottle" ("key", "count", "windowStart")
+    VALUES (${key}, 1, ${utcNow})
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE WHEN ${expired} THEN 1 ELSE "AuthThrottle"."count" + 1 END,
+      "windowStart" = CASE WHEN ${expired} THEN ${utcNow} ELSE "AuthThrottle"."windowStart" END
+    RETURNING "count", EXTRACT(EPOCH FROM (${utcNow} - "AuthThrottle"."windowStart"))::int AS "elapsed"`;
+  const row = rows[0];
+  if (Math.random() < 0.02) {
+    void prisma.$executeRaw`DELETE FROM "AuthThrottle" WHERE "windowStart" < ${utcNow} - interval '1 day'`.catch(() => undefined);
+  }
+  if (row.count <= limit) return { key, limited: false };
+  return { key, limited: true, retryAfterSeconds: Math.max(1, windowSeconds - row.elapsed) };
+}
+
+/** Rend une tentative réussie : seuls les échecs doivent compter contre l'IP. */
+export async function refundIpAttempt(result: ThrottleResult): Promise<void> {
+  if (!result) return;
+  await prisma.$executeRaw`UPDATE "AuthThrottle" SET "count" = GREATEST("count" - 1, 0) WHERE "key" = ${result.key}`;
+}

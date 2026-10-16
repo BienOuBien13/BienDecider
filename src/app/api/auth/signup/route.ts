@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { setSessionEmail } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
+import { consumeIpAttempt } from "@/lib/auth-throttle";
 
 export async function POST(request: NextRequest) {
   let body: { email?: unknown; password?: unknown };
@@ -19,6 +20,14 @@ export async function POST(request: NextRequest) {
   }
   if (typeof password !== "string" || password.length < 6) {
     return NextResponse.json({ error: "Mot de passe requis (6 caractères minimum)" }, { status: 400 });
+  }
+
+  const ipAttempt = await consumeIpAttempt(request, "signup");
+  if (ipAttempt?.limited) {
+    return NextResponse.json(
+      { error: "Trop de tentatives d'inscription depuis cette connexion. Réessayez plus tard." },
+      { status: 429, headers: { "Retry-After": String(ipAttempt.retryAfterSeconds) } },
+    );
   }
 
   const existing = await prisma.company.findUnique({ where: { ownerEmail: email } });
