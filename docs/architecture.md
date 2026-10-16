@@ -161,7 +161,7 @@ erDiagram
 |---|---|
 | Session | Cookie signé HMAC-SHA256, vérifié à temps constant (`timingSafeEqual`) |
 | Mots de passe | Hachés scrypt + sel, jamais stockés ni renvoyés au client (`omitPasswordHash` systématique) |
-| Force brute | 5 échecs → verrouillage 15 min, stocké en base (valable entre instances serverless) |
+| Force brute | 5 échecs → verrouillage 15 min, compteur incrémenté atomiquement en base (valable entre instances serverless) ; en plus, par IP hachée (`x-real-ip`, posée par Vercel) : 20 échecs de connexion / 15 min et 10 inscriptions / h, puis 429 + `Retry-After` (`src/lib/auth-throttle.ts`) ; ignoré si l'IP est absente |
 | Isolation multi-tenant | Toutes les routes vérifient l'appartenance via la session, pas via un ID client |
 | Contenu généré (site) | HTML nettoyé (scripts/handlers retirés) + servi dans une `<iframe sandbox="">` sans droits |
 | OAuth | Jamais de mot de passe tiers collecté — flux OAuth officiel uniquement (Google/Meta) |

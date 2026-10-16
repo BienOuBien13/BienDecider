@@ -253,6 +253,46 @@ test("five wrong passwords lock the account, even for the right password", async
   }
 });
 
+test("one IP cannot flood login or signup, and other IPs and successful logins are unaffected", async ({ request }) => {
+  const prisma = openDatabase();
+  const email = `security-ip-${randomUUID()}@example.invalid`;
+  const password = "mot-de-passe-correct";
+  const flooder = { "x-real-ip": `test-${randomUUID()}` };
+  const bystander = { "x-real-ip": `test-${randomUUID()}` };
+  const login = (address: Record<string, string>, who = `absent-${randomUUID()}@example.invalid`, candidate = "mauvais-mot-de-passe") =>
+    request.post(`${baseURL}/api/auth/login`, { headers: address, data: { email: who, password: candidate } });
+  try {
+    expect((await request.post(`${baseURL}/api/auth/signup`, { headers: bystander, data: { email, password } })).status()).toBe(201);
+    for (let attempt = 1; attempt <= 20; attempt++) {
+      expect((await login(flooder)).status(), `attempt ${attempt}`).toBe(404);
+    }
+    const blocked = await login(flooder);
+    expect(blocked.status()).toBe(429);
+    expect(Number(blocked.headers()["retry-after"])).toBeGreaterThan(0);
+    // Même un compte valide est refusé depuis l'IP bloquée, mais pas depuis une autre.
+    expect((await login(flooder, email, password)).status()).toBe(429);
+    expect((await login(bystander, email, password)).status()).toBe(200);
+
+    // Les connexions réussies sont rendues : elles ne consomment pas la limite.
+    const regular = { "x-real-ip": `test-${randomUUID()}` };
+    for (let attempt = 1; attempt <= 25; attempt++) {
+      expect((await login(regular, email, password)).status(), `success ${attempt}`).toBe(200);
+    }
+
+    const registrar = { "x-real-ip": `test-${randomUUID()}` };
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      expect((await request.post(`${baseURL}/api/auth/signup`, { headers: registrar, data: { email, password } })).status(), `signup ${attempt}`).toBe(409);
+    }
+    const signupBlocked = await request.post(`${baseURL}/api/auth/signup`, { headers: registrar, data: { email, password } });
+    expect(signupBlocked.status()).toBe(429);
+    expect(Number(signupBlocked.headers()["retry-after"])).toBeGreaterThan(0);
+    expect(await prisma.company.count({ where: { ownerEmail: email } })).toBe(1);
+  } finally {
+    await prisma.company.deleteMany({ where: { ownerEmail: email } });
+    await prisma.$disconnect();
+  }
+});
+
 test("only an explicit administrator can configure company agent quotas", async ({ request }) => {
   const admins = (process.env.ADMIN_EMAILS ?? "").split(",").map((email) => email.trim()).filter(Boolean);
   test.skip(admins.length === 0, "Quota administration requires ADMIN_EMAILS, as configured in CI.");

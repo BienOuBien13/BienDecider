@@ -294,6 +294,15 @@ model ExecutionLog {
   detail      String?
 }
 
+/** Compteur de tentatives d'authentification par adresse IP (hachée), fenêtre fixe — cf. src/lib/auth-throttle.ts. */
+model AuthThrottle {
+  key         String   @id // scope:HMAC(IP)
+  count       Int
+  windowStart DateTime
+
+  @@index([windowStart])
+}
+
 model DelegationRiskSetting {
   id          String   @id @default(cuid())
   actionKind  String   @unique
