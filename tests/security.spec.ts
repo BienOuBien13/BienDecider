@@ -39,6 +39,7 @@ const GUARDED_ROUTES: Guarded[] = [
   { method: "POST", path: "/api/companies", denied: 401 },
   { method: "PATCH", path: "/api/companies", denied: 401 },
   { method: "POST", path: "/api/companies/direction", denied: 401 },
+  { method: "POST", path: "/api/companies/delete", denied: 401 },
   { method: "POST", path: "/api/companies/outreach", denied: 401 },
   { method: "POST", path: "/api/facebook/disconnect", denied: 401 },
   { method: "POST", path: "/api/facebook/page", denied: 401 },
@@ -350,6 +351,47 @@ test("malformed or oversized input gets a clear 4xx, never a server error", asyn
     expect(await prisma.company.count({ where: { ownerEmail: { startsWith: "a@example" } } })).toBe(0);
   } finally {
     await prisma.company.delete({ where: { id: company.id } });
+    await prisma.$disconnect();
+  }
+});
+
+test("account deletion needs the password and an explicit confirmation, then erases every linked row", async ({ request }) => {
+  const prisma = openDatabase();
+  const email = `security-delete-${randomUUID()}@example.invalid`;
+  const password = "mot-de-passe-correct";
+  const company = await prisma.company.create({ data: {
+    ownerEmail: email, passwordHash: await hashPassword(password), name: "Delete Test", trade: "Artisan", servingArea: "Paris",
+  } });
+  await prisma.channelConnection.create({ data: { companyId: company.id, channel: "instagram", status: "connecte", accessToken: "jeton-a-effacer" } });
+  await prisma.actionPlanItem.create({ data: { companyId: company.id, agent: "marketing", title: "Action", rationale: "Raison", timing: "bientôt" } });
+  await prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post", content: "Contenu" } });
+  await prisma.chatMessage.create({ data: { companyId: company.id, role: "user", content: "Bonjour" } });
+  const other = await prisma.company.create({ data: { ownerEmail: `security-delete-other-${randomUUID()}@example.invalid`, name: "Autre", trade: "Artisan", servingArea: "Lyon" } });
+  const cookie = sessionCookie(email, company.sessionVersion);
+  const remove = (data: unknown, headers: Record<string, string> = { Origin: baseURL, Cookie: cookie }) =>
+    request.post(`${baseURL}/api/companies/delete`, { headers, data });
+  const linked = () => Promise.all([
+    prisma.channelConnection.count({ where: { companyId: company.id } }),
+    prisma.actionPlanItem.count({ where: { companyId: company.id } }),
+    prisma.agentProposal.count({ where: { companyId: company.id } }),
+    prisma.chatMessage.count({ where: { companyId: company.id } }),
+  ]);
+  try {
+    expect((await remove({ confirmed: true, password }, { Origin: "https://attacker.invalid", Cookie: cookie })).status()).toBe(403);
+    expect((await remove({ password })).status()).toBe(400);
+    expect((await remove({ confirmed: true })).status()).toBe(400);
+    expect((await remove({ confirmed: true, password: "mauvais-mot-de-passe" })).status()).toBe(401);
+    expect(await linked()).toEqual([1, 1, 1, 1]);
+
+    const deleted = await remove({ confirmed: true, password });
+    expect(deleted.status()).toBe(200);
+    expect(await deleted.json()).toMatchObject({ deleted: true });
+    expect(await prisma.company.count({ where: { id: company.id } })).toBe(0);
+    expect(await linked()).toEqual([0, 0, 0, 0]);
+    expect(await prisma.company.count({ where: { id: other.id } })).toBe(1);
+    expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: cookie } })).status()).toBe(401);
+  } finally {
+    await prisma.company.deleteMany({ where: { id: { in: [company.id, other.id] } } });
     await prisma.$disconnect();
   }
 });

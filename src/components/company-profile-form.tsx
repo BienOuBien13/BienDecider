@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { TradeCombobox } from "@/components/trade-combobox";
 
-export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
+export function CompanyProfileForm({ guided = false, children }: { guided?: boolean; children?: React.ReactNode }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [trade, setTrade] = useState("");
@@ -379,6 +379,7 @@ export function CompanyProfileForm({ guided = false }: { guided?: boolean }) {
           </button>
           {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
         </form>
+        {children}
       </div>
     </AppShell>
   );
