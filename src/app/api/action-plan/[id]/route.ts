@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionCompany } from "@/lib/session";
+import { readJsonObject } from "@/lib/request-body";
 
 const ALLOWED_STATUSES = ["lance", "termine", "ecarte"] as const;
 
@@ -23,19 +24,24 @@ export async function PATCH(
     return NextResponse.json({ error: "Cette action est en cours. Attendez la fin avant de la modifier ou de l'écarter." }, { status: 409 });
   }
 
-  const { status, feedback } = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
+  const { status, feedback } = body;
 
-  if (!ALLOWED_STATUSES.includes(status)) {
+  if (!ALLOWED_STATUSES.includes(status as (typeof ALLOWED_STATUSES)[number])) {
     return NextResponse.json(
       { error: `status doit être l'un de : ${ALLOWED_STATUSES.join(", ")}` },
       { status: 400 },
     );
   }
+  if (feedback !== undefined && (typeof feedback !== "string" || feedback.length > 1000)) {
+    return NextResponse.json({ error: "feedback doit être un texte de 1 000 caractères maximum" }, { status: 400 });
+  }
 
   const item = await prisma.actionPlanItem.update({
     where: { id },
     data: {
-      status,
+      status: status as string,
       feedback: status === "ecarte" && typeof feedback === "string" ? feedback : undefined,
     },
   });

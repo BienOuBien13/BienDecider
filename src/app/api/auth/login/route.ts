@@ -1,28 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { setSessionEmail } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
-import { consumeIpAttempt, refundIpAttempt } from "@/lib/auth-throttle";
-
-const MAX_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 15 * 60 * 1000;
-
-/** Incrément atomique ; un verrou expiré repart de zéro au lieu de reverrouiller au premier échec. */
-async function recordFailedAttempt(companyId: string): Promise<number> {
-  const now = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
-  const base = Prisma.sql`(CASE WHEN "lockedUntil" <= ${now} THEN 0 ELSE "failedLoginAttempts" END)`;
-  const rows = await prisma.$queryRaw<{ failedLoginAttempts: number }[]>`
-    UPDATE "Company" SET
-      "failedLoginAttempts" = ${base} + 1,
-      "lockedUntil" = CASE
-        WHEN ${base} + 1 >= ${MAX_ATTEMPTS} THEN ${now} + (${LOCK_DURATION_MS / 1000}::int * interval '1 second')
-        WHEN "lockedUntil" <= ${now} THEN NULL
-        ELSE "lockedUntil" END
-    WHERE "id" = ${companyId}
-    RETURNING "failedLoginAttempts"`;
-  return rows[0].failedLoginAttempts;
-}
+import { consumeIpAttempt, MAX_ATTEMPTS, recordFailedAttempt, refundIpAttempt } from "@/lib/auth-throttle";
+import { readJsonObject } from "@/lib/request-body";
 
 /**
  * Connexion par email + mot de passe. L'inscription est un flux séparé : une
@@ -37,19 +18,15 @@ async function recordFailedAttempt(companyId: string): Promise<number> {
  * ou d'énumérer des emails en masse ; seuls les échecs comptent contre l'IP.
  */
 export async function POST(request: NextRequest) {
-  let body: { email?: unknown; password?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
-  }
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const { password } = body;
 
-  if (!email || !email.includes("@")) {
+  if (!email || !email.includes("@") || email.length > 254) {
     return NextResponse.json({ error: "Email invalide" }, { status: 400 });
   }
-  if (!password || typeof password !== "string" || password.length < 6) {
+  if (!password || typeof password !== "string" || password.length < 6 || password.length > 1024) {
     return NextResponse.json({ error: "Mot de passe requis (6 caractères minimum)" }, { status: 400 });
   }
 

@@ -44,3 +44,18 @@ export async function exchangeGoogleCode(code: string, redirectUri: string) {
     expires_in: number;
   }>;
 }
+
+/** Retire l'autorisation chez Google. Ne lève jamais : l'effacement local ne doit pas en dépendre. */
+export async function revokeGoogleToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }),
+      signal: AbortSignal.timeout(10000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

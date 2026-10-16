@@ -39,6 +39,7 @@ const GUARDED_ROUTES: Guarded[] = [
   { method: "POST", path: "/api/companies", denied: 401 },
   { method: "PATCH", path: "/api/companies", denied: 401 },
   { method: "POST", path: "/api/companies/direction", denied: 401 },
+  { method: "POST", path: "/api/companies/delete", denied: 401 },
   { method: "POST", path: "/api/companies/outreach", denied: 401 },
   { method: "POST", path: "/api/facebook/disconnect", denied: 401 },
   { method: "POST", path: "/api/facebook/page", denied: 401 },
@@ -289,6 +290,108 @@ test("one IP cannot flood login or signup, and other IPs and successful logins a
     expect(await prisma.company.count({ where: { ownerEmail: email } })).toBe(1);
   } finally {
     await prisma.company.deleteMany({ where: { ownerEmail: email } });
+    await prisma.$disconnect();
+  }
+});
+
+test("malformed or oversized input gets a clear 4xx, never a server error", async ({ request }) => {
+  const prisma = openDatabase();
+  const email = `security-input-${randomUUID()}@example.invalid`;
+  const company = await prisma.company.create({ data: { ownerEmail: email, name: "Input Test", trade: "Artisan", servingArea: "Paris" } });
+  const planItem = await prisma.actionPlanItem.create({ data: { companyId: company.id, agent: "marketing", title: "Action", rationale: "Raison", timing: "bientôt" } });
+  const proposal = await prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post", content: "Contenu" } });
+  const cookie = sessionCookie(email, company.sessionVersion);
+  const send = (method: string, path: string, body: string, authenticated = true) => request.fetch(`${baseURL}${path}`, {
+    method,
+    headers: { Origin: baseURL, "Content-Type": "application/json", ...(authenticated ? { Cookie: cookie } : {}) },
+    data: body,
+    maxRedirects: 0,
+  });
+  const long = (length: number) => "x".repeat(length);
+  try {
+    const targets: [string, string, boolean?][] = [
+      ["POST", "/api/auth/login", false],
+      ["POST", "/api/auth/signup", false],
+      ["POST", "/api/action-plan"],
+      ["PATCH", `/api/action-plan/${planItem.id}`],
+      ["POST", "/api/companies"],
+      ["POST", "/api/companies/direction"],
+      ["POST", "/api/companies/outreach"],
+      ["PATCH", `/api/proposals/${proposal.id}`],
+    ];
+    for (const [method, path, authenticated] of targets) {
+      for (const body of ["pas du json", "null", "[]", "\"texte\"", "42"]) {
+        expect((await send(method, path, body, authenticated)).status(), `${method} ${path} ${body}`).toBe(400);
+      }
+    }
+
+    const oversized: [string, string, unknown, boolean?][] = [
+      ["POST", "/api/auth/login", { email: `${long(250)}@example.invalid`, password: "mot-de-passe" }, false],
+      ["POST", "/api/auth/login", { email: "a@example.invalid", password: long(1025) }, false],
+      ["POST", "/api/auth/signup", { email: `${long(250)}@example.invalid`, password: "mot-de-passe" }, false],
+      ["POST", "/api/auth/signup", { email: "a@example.invalid", password: long(1025) }, false],
+      ["POST", "/api/action-plan", { agent: "marketing", title: long(301), rationale: "Raison" }],
+      ["POST", "/api/action-plan", { agent: "marketing", title: "Titre", rationale: long(3001) }],
+      ["PATCH", `/api/action-plan/${planItem.id}`, { status: "ecarte", feedback: long(1001) }],
+      ["PATCH", `/api/action-plan/${planItem.id}`, { status: "ecarte", feedback: 12 }],
+      ["POST", "/api/companies", { name: long(161), trade: "Artisan", servingArea: "Paris" }],
+      ["POST", "/api/companies", { name: ["Nom"], trade: "Artisan", servingArea: "Paris" }],
+      ["POST", "/api/companies", { name: "Nom", trade: "Artisan", servingArea: "Paris", monthlyRevenue: 5_000_000_000 }],
+      ["POST", "/api/companies", { name: "Nom", trade: "Artisan", servingArea: "Paris", description: long(2001) }],
+      ["POST", "/api/companies", { name: "Nom", trade: "Artisan", servingArea: "Paris", targetDate: 5 }],
+      ["POST", "/api/companies/direction", { direction: long(2001) }],
+      ["PATCH", `/api/proposals/${proposal.id}`, { status: "brouillon", content: long(100_001), expectedVersion: 1 }],
+      ["PATCH", `/api/proposals/${proposal.id}`, { leadSource: long(2001) }],
+    ];
+    for (const [method, path, body, authenticated] of oversized) {
+      const response = await send(method, path, JSON.stringify(body), authenticated);
+      expect(response.status(), `${method} ${path} ${JSON.stringify(body).slice(0, 80)}`).toBe(400);
+      expect(typeof (await response.json()).error).toBe("string");
+    }
+    expect(await prisma.company.count({ where: { ownerEmail: { startsWith: "a@example" } } })).toBe(0);
+  } finally {
+    await prisma.company.delete({ where: { id: company.id } });
+    await prisma.$disconnect();
+  }
+});
+
+test("account deletion needs the password and an explicit confirmation, then erases every linked row", async ({ request }) => {
+  const prisma = openDatabase();
+  const email = `security-delete-${randomUUID()}@example.invalid`;
+  const password = "mot-de-passe-correct";
+  const company = await prisma.company.create({ data: {
+    ownerEmail: email, passwordHash: await hashPassword(password), name: "Delete Test", trade: "Artisan", servingArea: "Paris",
+  } });
+  await prisma.channelConnection.create({ data: { companyId: company.id, channel: "instagram", status: "connecte", accessToken: "jeton-a-effacer" } });
+  await prisma.actionPlanItem.create({ data: { companyId: company.id, agent: "marketing", title: "Action", rationale: "Raison", timing: "bientôt" } });
+  await prisma.agentProposal.create({ data: { companyId: company.id, agent: "contenu", kind: "social_post", title: "Post", content: "Contenu" } });
+  await prisma.chatMessage.create({ data: { companyId: company.id, role: "user", content: "Bonjour" } });
+  const other = await prisma.company.create({ data: { ownerEmail: `security-delete-other-${randomUUID()}@example.invalid`, name: "Autre", trade: "Artisan", servingArea: "Lyon" } });
+  const cookie = sessionCookie(email, company.sessionVersion);
+  const remove = (data: unknown, headers: Record<string, string> = { Origin: baseURL, Cookie: cookie }) =>
+    request.post(`${baseURL}/api/companies/delete`, { headers, data });
+  const linked = () => Promise.all([
+    prisma.channelConnection.count({ where: { companyId: company.id } }),
+    prisma.actionPlanItem.count({ where: { companyId: company.id } }),
+    prisma.agentProposal.count({ where: { companyId: company.id } }),
+    prisma.chatMessage.count({ where: { companyId: company.id } }),
+  ]);
+  try {
+    expect((await remove({ confirmed: true, password }, { Origin: "https://attacker.invalid", Cookie: cookie })).status()).toBe(403);
+    expect((await remove({ password })).status()).toBe(400);
+    expect((await remove({ confirmed: true })).status()).toBe(400);
+    expect((await remove({ confirmed: true, password: "mauvais-mot-de-passe" })).status()).toBe(401);
+    expect(await linked()).toEqual([1, 1, 1, 1]);
+
+    const deleted = await remove({ confirmed: true, password });
+    expect(deleted.status()).toBe(200);
+    expect(await deleted.json()).toMatchObject({ deleted: true });
+    expect(await prisma.company.count({ where: { id: company.id } })).toBe(0);
+    expect(await linked()).toEqual([0, 0, 0, 0]);
+    expect(await prisma.company.count({ where: { id: other.id } })).toBe(1);
+    expect((await request.get(`${baseURL}/api/companies`, { headers: { Cookie: cookie } })).status()).toBe(401);
+  } finally {
+    await prisma.company.deleteMany({ where: { id: { in: [company.id, other.id] } } });
     await prisma.$disconnect();
   }
 });

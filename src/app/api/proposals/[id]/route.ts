@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getSessionCompany } from "@/lib/session";
 import { syncPlanItemStatus } from "@/lib/plan-item-status";
 import { isPublicSource } from "@/lib/proposal-review";
+import { readJsonObject } from "@/lib/request-body";
+
+const MAX_CONTENT_LENGTH = 100_000;
 
 // "brouillon" enregistre une version sans décision ; "validee"/"modifiee"
 // approuvent la version courante (avec ou sans nouveau contenu) ; "rejetee" refuse ;
@@ -27,10 +30,17 @@ export async function PATCH(
     return NextResponse.json({ error: "Proposition introuvable" }, { status: 404 });
   }
 
-  const body = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
   const { status, content, rejectionReason, expectedVersion, leadSource } = body as {
     status: RequestedStatus; content?: unknown; rejectionReason?: unknown; expectedVersion?: unknown; leadSource?: unknown;
   };
+  if (typeof content === "string" && content.length > MAX_CONTENT_LENGTH) {
+    return NextResponse.json({ error: `Le contenu est limité à ${MAX_CONTENT_LENGTH.toLocaleString("fr-FR")} caractères.` }, { status: 400 });
+  }
+  if (typeof leadSource === "string" && leadSource.length > 2000) {
+    return NextResponse.json({ error: "La source est limitée à 2 000 caractères." }, { status: 400 });
+  }
 
   if (status === undefined && leadSource !== undefined) {
     if (existing.kind !== "prospect" || typeof leadSource !== "string" || !isPublicSource(leadSource)) {
