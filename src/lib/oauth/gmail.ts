@@ -62,6 +62,19 @@ export function decryptGmailAccount(value: string, companyId: string) {
   return gmailAccountSchema.parse(JSON.parse(decryptGmailToken(value, companyId)));
 }
 
+/** Retire l'autorisation chez Google. Ne lève jamais : l'effacement local ne doit pas en dépendre. */
+export async function revokeGmailConnection(connection: { refreshToken: string | null; accessToken: string | null } | null, companyId: string): Promise<boolean> {
+  try {
+    const encrypted = connection?.refreshToken ?? connection?.accessToken;
+    if (!connection || !encrypted) return false;
+    const token = connection.refreshToken ? decryptGmailAccount(connection.refreshToken, companyId).token : decryptGmailToken(encrypted, companyId);
+    await gmailClient().revokeToken(token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function buildGmailMessage(message: z.infer<typeof gmailMessageSchema>, sender: string) {
   const validated = gmailMessageSchema.parse(message);
   const from = z.email().parse(sender);

@@ -4,6 +4,25 @@ import { prisma } from "@/lib/prisma";
 
 export type ThrottleScope = "login" | "signup";
 
+export const MAX_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000;
+
+/** Incrément atomique des échecs de mot de passe ; un verrou expiré repart de zéro au lieu de reverrouiller au premier échec. */
+export async function recordFailedAttempt(companyId: string): Promise<number> {
+  const now = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
+  const base = Prisma.sql`(CASE WHEN "lockedUntil" <= ${now} THEN 0 ELSE "failedLoginAttempts" END)`;
+  const rows = await prisma.$queryRaw<{ failedLoginAttempts: number }[]>`
+    UPDATE "Company" SET
+      "failedLoginAttempts" = ${base} + 1,
+      "lockedUntil" = CASE
+        WHEN ${base} + 1 >= ${MAX_ATTEMPTS} THEN ${now} + (${LOCK_DURATION_MS / 1000}::int * interval '1 second')
+        WHEN "lockedUntil" <= ${now} THEN NULL
+        ELSE "lockedUntil" END
+    WHERE "id" = ${companyId}
+    RETURNING "failedLoginAttempts"`;
+  return rows[0].failedLoginAttempts;
+}
+
 const POLICY: Record<ThrottleScope, { limit: number; windowSeconds: number }> = {
   login: { limit: 20, windowSeconds: 15 * 60 },
   signup: { limit: 10, windowSeconds: 60 * 60 },
