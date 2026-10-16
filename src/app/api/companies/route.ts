@@ -3,6 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getSessionEmail } from "@/lib/session";
 import { omitPasswordHash } from "@/lib/safe-company";
 import { z } from "zod";
+import { readJsonObject } from "@/lib/request-body";
+
+// Les montants sont des entiers 32 bits en base : au-delà, la requête échouerait en erreur serveur.
+const MAX_AMOUNT = 1_000_000_000;
+const TEXT_LIMITS: Record<string, number> = {
+  website: 500, socialHandles: 500, objective: 500, description: 2000, phone: 100, certifications: 500, openingHours: 500,
+};
 
 const profileDetailsSchema = z.object({
   objective: z.string().trim().max(500).optional(),
@@ -41,11 +48,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Non connecté" }, { status: 401 });
   }
 
-  const body = await request.json();
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
   const {
-    name,
-    trade,
-    servingArea,
+    name: rawName,
+    trade: rawTrade,
+    servingArea: rawServingArea,
     website,
     socialHandles,
     objective,
@@ -60,17 +68,22 @@ export async function POST(request: NextRequest) {
     newClientsPerMonth,
   } = body;
 
-  if (!name || !trade || !servingArea) {
-    return NextResponse.json(
-      { error: "name, trade et servingArea sont requis" },
-      { status: 400 },
-    );
+  const required = { name: [rawName, 160], trade: [rawTrade, 160], servingArea: [rawServingArea, 240] } as const;
+  for (const [key, [value, max]] of Object.entries(required)) {
+    if (typeof value !== "string" || !value.trim()) {
+      return NextResponse.json({ error: "name, trade et servingArea sont requis" }, { status: 400 });
+    }
+    if (value.length > max) return NextResponse.json({ error: `${key} est limité à ${max} caractères` }, { status: 400 });
   }
+  const name = (rawName as string).trim();
+  const trade = (rawTrade as string).trim();
+  const servingArea = (rawServingArea as string).trim();
 
   const amounts = { monthlyRevenue, revenueTarget, averageClientValue, newClientsPerMonth };
   for (const [key, value] of Object.entries(amounts)) {
-    if (value != null && value !== "" && (!Number.isInteger(Number(value)) || Number(value) < 0)) {
-      return NextResponse.json({ error: `${key} doit être un entier positif` }, { status: 400 });
+    if (value == null || value === "") continue;
+    if ((typeof value !== "number" && typeof value !== "string") || !Number.isInteger(Number(value)) || Number(value) < 0 || Number(value) > MAX_AMOUNT) {
+      return NextResponse.json({ error: `${key} doit être un entier positif (${MAX_AMOUNT.toLocaleString("fr-FR")} maximum)` }, { status: 400 });
     }
   }
   const optionalTextFields = { website, socialHandles, objective, description, phone, certifications, openingHours };
@@ -78,8 +91,15 @@ export async function POST(request: NextRequest) {
     if (value != null && typeof value !== "string") {
       return NextResponse.json({ error: `${key} doit être du texte` }, { status: 400 });
     }
+    const max = TEXT_LIMITS[key];
+    if (typeof value === "string" && value.length > max) {
+      return NextResponse.json({ error: `${key} est limité à ${max} caractères` }, { status: 400 });
+    }
   }
-  const parsedTargetDate = targetDate ? new Date(targetDate) : null;
+  if (targetDate != null && targetDate !== "" && typeof targetDate !== "string") {
+    return NextResponse.json({ error: "targetDate invalide" }, { status: 400 });
+  }
+  const parsedTargetDate = targetDate ? new Date(targetDate as string) : null;
   if (parsedTargetDate && Number.isNaN(parsedTargetDate.getTime())) {
     return NextResponse.json({ error: "targetDate invalide" }, { status: 400 });
   }

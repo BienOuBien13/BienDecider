@@ -4,6 +4,7 @@ import { setSessionEmail } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { consumeIpAttempt, refundIpAttempt } from "@/lib/auth-throttle";
+import { readJsonObject } from "@/lib/request-body";
 
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 15 * 60 * 1000;
@@ -37,19 +38,15 @@ async function recordFailedAttempt(companyId: string): Promise<number> {
  * ou d'énumérer des emails en masse ; seuls les échecs comptent contre l'IP.
  */
 export async function POST(request: NextRequest) {
-  let body: { email?: unknown; password?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
-  }
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const { password } = body;
 
-  if (!email || !email.includes("@")) {
+  if (!email || !email.includes("@") || email.length > 254) {
     return NextResponse.json({ error: "Email invalide" }, { status: 400 });
   }
-  if (!password || typeof password !== "string" || password.length < 6) {
+  if (!password || typeof password !== "string" || password.length < 6 || password.length > 1024) {
     return NextResponse.json({ error: "Mot de passe requis (6 caractères minimum)" }, { status: 400 });
   }
 

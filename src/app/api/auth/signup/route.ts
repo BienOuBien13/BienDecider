@@ -3,22 +3,19 @@ import { setSessionEmail } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { consumeIpAttempt } from "@/lib/auth-throttle";
+import { readJsonObject } from "@/lib/request-body";
 
 export async function POST(request: NextRequest) {
-  let body: { email?: unknown; password?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
-  }
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
 
   const email = typeof body.email === "string" ? body.email.trim() : "";
   const { password } = body;
 
-  if (!email || !email.includes("@")) {
+  if (!email || !email.includes("@") || email.length > 254) {
     return NextResponse.json({ error: "Email invalide" }, { status: 400 });
   }
-  if (typeof password !== "string" || password.length < 6) {
+  if (typeof password !== "string" || password.length < 6 || password.length > 1024) {
     return NextResponse.json({ error: "Mot de passe requis (6 caractères minimum)" }, { status: 400 });
   }
 

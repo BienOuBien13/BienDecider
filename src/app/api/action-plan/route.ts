@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionCompany } from "@/lib/session";
 import { FINDING_ACTION_AGENTS } from "@/lib/finding-shared";
+import { readJsonObject } from "@/lib/request-body";
 
 /**
  * Création directe d'une action du plan, sans passer par Paul (donc sans
@@ -18,12 +19,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Non connecté" }, { status: 401 });
   }
 
-  const { agent, title, rationale } = await request.json();
-  if (!FINDING_ACTION_AGENTS.includes(agent)) {
+  const body = await readJsonObject(request);
+  if (!body) return NextResponse.json({ error: "Requête invalide" }, { status: 400 });
+  const { agent, title, rationale } = body;
+  if (typeof agent !== "string" || !(FINDING_ACTION_AGENTS as readonly string[]).includes(agent)) {
     return NextResponse.json({ error: `agent doit être l'un de : ${FINDING_ACTION_AGENTS.join(", ")}` }, { status: 400 });
   }
   if (typeof title !== "string" || !title.trim() || typeof rationale !== "string" || !rationale.trim()) {
     return NextResponse.json({ error: "title et rationale (non vides) requis" }, { status: 400 });
+  }
+  if (title.length > 300 || rationale.length > 3000) {
+    return NextResponse.json({ error: "title (300 caractères) ou rationale (3 000 caractères) trop long" }, { status: 400 });
   }
 
   const item = await prisma.actionPlanItem.create({
